@@ -1,0 +1,862 @@
+---
+title: "Risk of homologous reinfection"
+author: "Christine Markwalter and Erica Zeno"
+date: "15 March 2022"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(dpi=300)
+#knitr::opts_knit$set(root.dir = "~/UNC OneDrive/OneDrive - University of North Carolina at Chapel Hill/UNC Dissertation/Duke Malaria Work/Mozzie Survival")
+grDevices::pdf.options(useDingbats = FALSE)
+
+#if (!require("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+#BiocManager::install("Biostrings")
+
+library(Biostrings)
+#library(ggplot2) #redundant
+#library(dplyr) #redundant
+library(tidyverse)
+library(ggpmisc)
+library(lubridate)
+library(randomForest)
+
+library(survival)
+library(survminer)
+library(coxme)
+#install.packages("forestplot")
+library(forestplot)
+
+library(ggfortify)
+library(ggseqlogo)
+library(arsenal)
+
+library(ggpubr)
+```
+
+
+
+# Human data
+```{r, warning=F,message=F}
+
+HumanData<-read.csv("epitopes/MozzieAminoAcidAnalysis/Human Demographic Data/spat21_human_final_censored_data_for_dissertation_with_exposure_outcome_1MAR2020.csv") %>%
+  mutate(week_year = paste0(week(sample_id_date), "_", year(sample_id_date)))
+
+season <- readRDS("epitopes/MozzieAminoAcidAnalysis/Mosquito demographic data/spat21_mosquito_anopheles_merged_data_18JAN2019.RDS") %>%
+  mutate(collection_year = year(collection_date)) %>%
+  arrange(collection_date) %>%
+  group_by(collection_year, collection_week) %>%
+  mutate(n_week = n()) %>%
+  mutate(week_year = paste0(collection_week,"_", collection_year)) %>%
+  ungroup() %>%
+  arrange(collection_date) %>%
+  select(week_year, n_week) %>%
+  unique() %>%
+  mutate(mosquito_prev_2weeks = lag(n_week,2) + lag(n_week,1)) %>%
+  mutate(mosquito_prev_2weeks_cat = ifelse(mosquito_prev_2weeks <= 50, "0 - 50 mosquitoes", ifelse(mosquito_prev_2weeks > 50, "> 50 mosquitoes", NA))) %>%
+  select(week_year,n_week, mosquito_prev_2weeks, mosquito_prev_2weeks_cat) %>%
+  unique()
+
+HumanData <- HumanData %>%
+  left_join(season)
+
+#there is missing data for the  first weeks of the study. In both cases, the number of mosquitoes in THAT week was > 50, so we will assume that the sum of the previous weeks was also > 50 We will use the mosquito counts closest to those weeks.
+
+HumanData$mosquito_prev_2weeks_cat[HumanData$week_year == "24_2017"] <- "> 50 mosquitoes"
+HumanData$mosquito_prev_2weeks_cat[HumanData$week_year == "25_2017"] <- "> 50 mosquitoes"
+HumanData$mosquito_prev_2weeks_cat[HumanData$week_year == "26_2017"] <- "> 50 mosquitoes"
+
+#additionally, over the holidays we were missing 2 weeks of mozzie collections, but the previous two weeks had a small handfull of mosquitoes
+HumanData$mosquito_prev_2weeks_cat[HumanData$week_year == "51_2017"] <- "0 - 50 mosquitoes"
+HumanData$mosquito_prev_2weeks_cat[HumanData$week_year == "52_2017"] <- "0 - 50 mosquitoes"
+
+HumanData$mosquito_prev_2weeks_cat <- factor(HumanData$mosquito_prev_2weeks_cat, levels = c("0 - 50 mosquitoes", "> 50 mosquitoes"))
+
+HDS<-HumanData %>% 
+  dplyr::select(sample_name_dbs,unq_memID,sample_id_date,main_outcome_primary_case_def,main_exposure_primary_case_def, mosquito_prev_2weeks_cat)%>%
+  filter(main_exposure_primary_case_def == "asymptomatic infection" | main_outcome_primary_case_def == "symptomatic infection") %>%
+  mutate(symptomatic_status = ifelse(is.na(main_exposure_primary_case_def), as.character(main_outcome_primary_case_def),as.character(main_exposure_primary_case_def))) %>%
+  dplyr::select(-c(main_exposure_primary_case_def,main_outcome_primary_case_def))
+head(HDS)
+
+```
+
+
+# CHOOSE EPITOPE
+Define current epitope CSP/AMA and AA positions of interest (as determined from the RF models):
+```{r,echo=T}
+# #CSP CD4 T-cell
+# CurrentEpitopeName<-("CD4")
+# EpitopeCurrent<-c("x25","x28","x29","x31")
+# AMA <- FALSE
+
+
+#CSP CD8 T-cell
+# CurrentEpitopeName<-("CD8")
+# EpitopeCurrent<-c("x59","x64","x66","x68")
+# AMA <- FALSE
+
+# #CSP Combined T-cell
+# CurrentEpitopeName<-("Combined")
+# EpitopeCurrent<-c("x25","x28","x29","x31","x59","x64","x66","x68")
+# AMA <- FALSE
+# 
+# #AMA
+CurrentEpitopeName<-("AMA")
+EpitopeCurrent<-c("x36","x44","x77","x90")
+AMA <- TRUE
+
+
+```
+
+# Load sequence data
+
+CSP
+```{r, warning=F,message=F}
+
+seqs <- Biostrings::readDNAStringSet("epitopes/MozzieAminoAcidAnalysis/spat21_CSP_uniqueSeqs_final_censored.fasta")
+
+
+haplotypes<-read.csv("epitopes/MozzieAminoAcidAnalysis/Haplotype Data for Haplotype Prevalence/Summarized data/spat21_csp_summarized_haplotype_list_31DEC2019.csv")
+
+head(seqs)
+head(haplotypes)
+```
+
+AMA
+```{r, eval = AMA, warning=F,message=F}
+seqs <- Biostrings::readDNAStringSet("epitopes/MozzieAminoAcidAnalysis/spat21_AMA_uniqueSeqs_final_censored.fasta")
+
+haplotypes<-read.csv("epitopes/MozzieAminoAcidAnalysis/Haplotype Data for Haplotype Prevalence/Summarized data/spat21_ama_summarized_haplotype_list_31DEC2019.csv")
+
+head(seqs)
+head(haplotypes)
+
+```
+
+
+## Remove mozzies
+
+```{r, warning=F,message=F}
+haplotypes = haplotypes %>%
+  filter(!(str_detect(sample_name_dbs,"H")) & !(str_detect(sample_name_dbs,"A")) | sample_name_dbs == "K14-170717-1A-R") 
+
+#make list of haplotypes found in human samples
+haplotypelist=haplotypes%>%
+  separate_rows(haplotype_list)%>%
+  summarise(HType=paste(unique(haplotype_list)))
+
+#Replace haplotype names to match them with seq names
+haplotypelist$HType=sub('.', '', haplotypelist$HType)
+haplotypelist=haplotypelist%>%
+  mutate(seqs=paste("Seq",HType,sep=""))
+
+length(haplotypelist$HType)
+
+```
+
+
+## Translate nucleotide sequence to AAs
+csp
+```{r, warning=FALSE}
+#CSP is translated in reverse and starting at the 3rd nucleotide
+DNAseqrev<-reverseComplement(seqs)
+DNAseqrev <- DNAStringSet(DNAseqrev, start=3)
+length(unique(DNAseqrev))
+
+AAseq<-translate(DNAseqrev, genetic.code=GENETIC_CODE, no.init.codon=FALSE,
+             if.fuzzy.codon="error")
+
+AAseqmatrix<-consensusMatrix(AAseq, as.prob = TRUE)
+AArevmatrixvariant=AAseqmatrix
+```
+
+ama
+```{r, eval = AMA, warning=F,message=F}
+length(unique(seqs))
+#Correct start of translation AMA is translated from the 3rd nucleotide
+seqs3<- DNAStringSet(seqs, start=3)
+AAseq=translate(seqs3)
+length(unique(AAseq))
+
+AAseqmatrix<-consensusMatrix(AAseq, as.prob = TRUE)
+```
+
+
+
+Change sequences to dataframe and combine them with haplotype name to match with human data
+```{r}
+
+AAdf<-as.data.frame(AAseq)
+AAdf<-cbind(seq = rownames(AAdf), AAdf)
+rownames(AAdf)<-1:nrow(AAdf)
+AAdf$HType=paste("H",sub('...', '', AAdf$seq),sep="")
+length(unique(AAdf$x))
+
+```
+
+Removing invariant aa positions
+```{r, warning=F,message=F}
+AAseqmatrix<-as.data.frame(AAseqmatrix)
+variantAA<-AAseqmatrix %>%
+  #Convert column from factor to numeric
+  mutate_all(~as.numeric(as.character(.))) %>%
+  #de-select column whose max value is 1 
+  select_if(~max(., na.rm = TRUE) != 1)
+colnames(variantAA) <- sub("V", "", colnames(variantAA))
+poslist<-names(variantAA)
+AAseq[[1]]
+AAseq[[1]][as.numeric(poslist)]
+
+
+#Make every variant aa position into a column and append it to the AA dataframe
+for(i in as.numeric(poslist)){
+  AApos<-as.data.frame(subseq(AAseq,i,i)) #takes first amino acid position for all 298 sequences
+  AApos[,1]<-as.factor(AApos[,1])
+  colnames(AApos)<- paste("x", i, sep = "")
+  AAdf[ , ncol(AAdf) + 1] <- AApos 
+}
+ 
+
+```
+
+
+filter protein sequences only in haplotypes present in human samples
+```{r}
+AAdf <- AAdf%>%
+  filter(seq %in% haplotypelist$seqs)
+length(unique(AAdf$x))
+```
+
+
+removing sequences with stop codons
+```{r,eval=T}
+AAdf$nstopcodon <- vcountPattern("*", AAdf$x, max.mismatch=0)
+AAdf%>%
+  group_by(nstopcodon)%>%
+  count()
+cat("number of stopcodons:", sum(AAdf$nstopcodon), "\n")
+AAdf=AAdf%>%
+  filter(nstopcodon==0)%>%
+  select(-nstopcodon,-seq)
+cat("number of sequences without stop codons", length(AAdf$x), "\n")
+cat("number of unique sequences",length(unique(AAdf$x)))
+
+```
+
+Separating each samples haplotypes into individual rows and make them into a list of unique haplotypes
+```{r, warning=F,message=F}
+haplotypesExp<-tidyr::separate_rows(haplotypes, haplotype_list, sep=",")
+haplotypesExp$HType<-haplotypesExp$haplotype_list
+MergHaploAA<-merge(haplotypesExp,AAdf,by="HType")
+dim(MergHaploAA)
+#We lose 7 haplotype occurences because upon merging due to removing sequences with stop codons.
+
+
+```
+
+## Merge AA sequences with human demographic data
+
+```{r, warning=F,message=F}
+MergedData<-merge(HDS,MergHaploAA,by="sample_name_dbs")
+#we lost a number of samples here - perhaps due to NA values in asym/sym status?
+MergedData$symptomatic_status<-as.factor(MergedData$symptomatic_status)
+MergedData$sample_id_date<-as.Date(MergedData$sample_id_date)
+```
+
+Unite amino acid positions according to epitope selection
+```{r, warning=F,message=F}
+MergedData = dplyr::arrange(MergedData,unq_memID,sample_id_date)
+
+aa_coding_data=MergedData%>%
+  dplyr::select(HType,sample_name_dbs,unq_memID,sample_id_date,haplotype_number,symptomatic_status,starts_with("x"))%>%
+  unite("Epitope",EpitopeCurrent,sep="")
+
+MergedData%>%
+  filter(!is.na(symptomatic_status))%>%
+  summarize(length(unique(unq_memID)))
+
+length(unique(aa_coding_data$Epitope))
+NumberUnqEpitopes=length(unique(aa_coding_data$Epitope))
+sort(unique(aa_coding_data$Epitope))
+```
+
+```{r}
+aa_coding_data<-aa_coding_data %>% 
+  group_by(sample_name_dbs) %>%
+  mutate(epitopecount = length(unique(Epitope)))%>%
+  summarise(
+    epitopecount= paste(unique(epitopecount), collapse = ""),
+    unq_memID= paste(unique(unq_memID), collapse = ""),
+    symptomatic_status= paste(unique(symptomatic_status), collapse = ""),
+    sample_id_date= paste(unique(sample_id_date), collapse = ""),
+    haplotype_number=paste(unique(haplotype_number),collapse=""),
+    AAs = paste(unique(Epitope), collapse = ","),
+    Htype= paste(unique(HType),collapse=","))
+
+dfmerge=HumanData %>% 
+  dplyr::select(sample_name_dbs,unq_memID,sample_id_date,village_name)
+data_m = aa_coding_data %>%
+  dplyr::select(-c(unq_memID,sample_id_date))
+aa_coding_data = left_join(dfmerge,data_m,by="sample_name_dbs")
+
+aa_coding_data<-dplyr::arrange(aa_coding_data,unq_memID,sample_id_date)
+unique_participants = unique(aa_coding_data$unq_memID)
+
+# cut down the data set to just the malaria positive samples
+aadata_to_export = aa_coding_data %>% filter(aa_coding_data$sample_name_dbs %in% MergedData$sample_name_dbs)%>%
+ mutate_at(c("haplotype_number","epitopecount"),as.numeric)
+#calculate ratios and differences in number of haplotypes and epitope types
+aadata_to_export$proportionAAvsHap = aadata_to_export$epitopecount/aadata_to_export$haplotype_number
+aadata_to_export$difAAvsHap = aadata_to_export$epitopecount-aadata_to_export$haplotype_number
+```
+
+
+
+# Homologous reinfection
+## AA types
+Time to, starting from any epitope in a sample that is not followed by a sample with the same epitope
+```{r,fig.width=2.5,fig.height=5}
+TimeToDataAdvEpitope=HumanData%>%
+  mutate(symptomatic_status = ifelse(is.na(main_exposure_primary_case_def), as.character(main_outcome_primary_case_def),as.character(main_exposure_primary_case_def))) %>%
+  arrange(unq_memID, sample_id_date) %>% 
+  group_by(unq_memID) %>%
+  #add columns for previous symptomatic status so that we can filter out infections within 14 days of a symptomatic infection
+  mutate(Sx_prev = lag(symptomatic_status,1),
+         days_since_prev = ymd(sample_id_date) - ymd(lag(sample_id_date,1))) %>%
+  #remove positive samples within 14 days of a symptomatic infection (there are 25 of them)
+  filter(Sx_prev != "symptomatic infection"| is.na(Sx_prev) | days_since_prev > days(14) | pf_pcr_infection_status != "positive") %>%
+  ungroup() %>%
+  arrange(unq_memID, sample_id_date) %>% 
+  group_by(unq_memID) %>%
+#Add a number to each sample
+  mutate(number=1)%>%
+  mutate(samplenumber=cumsum(number))%>%
+#max sample number denote the final sample
+  mutate(samplemax=max(samplenumber))%>%
+#Slim down the dataset
+  select(unq_memID,pf_pcr_infection_status,sample_id_date,sample_name_dbs,age_y_baseline,gender,samplenumber,samplemax,pfr364Q_std_combined, symptomatic_status, mosquito_prev_2weeks_cat)%>%
+#Bring in haplotype data
+  right_join(aadata_to_export)%>%
+  separate_rows(AAs)%>%
+  group_by(unq_memID,AAs)%>%
+#Uncleared haplotypes are defined as haplotypes that occur in two subsequent samples - note this where one should check if the dates are handled correctly ie. counted from end to start of each haplotype
+  mutate(toNext=case_when(samplenumber==lead(samplenumber,1)-1 & symptomatic_status == "asymptomatic infection" ~ "uncleared",
+                          samplenumber==lead(samplenumber,1)-1 & symptomatic_status == "symptomatic infection" ~ paste(as.numeric(ymd(lead(sample_id_date,1)) - ymd(sample_id_date))),
+                          samplenumber != lead(samplenumber,1)-1 ~ paste(as.numeric(ymd(lead(sample_id_date,1)) - ymd(sample_id_date)))))%>%
+#Remove samples without AAs and uncleared AAs
+  filter(is.na(toNext)|toNext!="uncleared")%>%
+#Add censoring criteria ie if there is no next sample, time to end of study is calculated and EventCensored=0 indicate that
+  mutate(EventCensored = if_else(toNext!="NA","1","NA","0"))%>%
+  mutate(Days = if_else(EventCensored=="1",paste0(toNext),paste0(as.Date("20180731","%Y%m%d") - as.Date(sample_id_date))))%>%
+  mutate(Days=as.numeric(Days))%>%
+  mutate(EventCensored=as.numeric(EventCensored))%>%
+# remove final sample 
+  filter(samplenumber!=samplemax)%>%
+  mutate(epitopeCat = case_when(epitopecount==1~"1",
+                                epitopecount >5 ~ ">5",
+                                epitopecount >1 ~ "2-5")) %>%
+  mutate(epitopeCat=factor(epitopeCat,levels=c("1","2-5",">5")))%>%
+  mutate(ageCat = case_when(age_y_baseline <= 5 ~ "<5",
+                            age_y_baseline >5 & age_y_baseline < 15 ~ "5-15",
+                            age_y_baseline >= 15 ~ ">15"))%>%
+  mutate(ageCat=factor(ageCat,levels=c("<5","5-15",">15")))
+
+```
+
+## Survival analyses
+
+### Overall
+```{r}
+#Median time (days) to reinfection
+TimeToDataAdvEpitope%>%
+  ungroup()%>%
+  filter(EventCensored==1)%>%
+  summarise(median=median(Days),IQR=IQR(Days))
+#Median survival time
+
+homol_overall_fit_surv <- survfit(Surv(Days,EventCensored)~1,data=TimeToDataAdvEpitope)
+#Calculate proportion reinfectied after 1 year
+summary(survfit(Surv(Days,EventCensored) ~ 1, data = TimeToDataAdvEpitope), times = 365.25)
+```
+
+
+### By symptomaticity
+```{r}
+
+homol_fit_surv<-survfit(Surv(Days,EventCensored)~symptomatic_status,data=TimeToDataAdvEpitope)
+#Calculate proportion reinfected after 1 year stratified by symptomaticity
+summary(homol_fit_surv,times=365.25)
+
+homol_fig <- ggsurvplot(homol_fit_surv,risk.table = TRUE,
+                xlab=("Time in days"),
+                ylab=("Probability of survival without reinfection"),
+                font.main = c(12),
+                font.x = c(10),
+                font.y = c(10),
+                font.tickslab = c(8),
+                fontsize = 4,
+                risk.table.fontsize = 4,
+                palette = c("#00BFC4", "#F8766D"),
+                tables.theme = theme_cleantable(),
+                tables.height = 0.25,
+                tables.col = "strata",
+                legend = "none",
+                legend.title = "Index infection",
+                legend.labs = c("Asx", "Sx"),
+                conf.int = TRUE,title="Time to reinfection",xlim=c(-10,400))
+
+homol_fig
+
+saveRDS(homol_fig, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_homol_nocutoff.RDS"))
+
+#These curves clearly cross, breaking the proportional hazards assumption. Further evidence:
+
+#making symptomatic status a binary numeric variable
+TimeToDataAdvEpitope <- TimeToDataAdvEpitope %>% mutate(symptomatic_bin=ifelse(symptomatic_status=="symptomatic infection",1,0))
+
+#are there tied event times?
+ties <- TimeToDataAdvEpitope %>% 
+  filter(EventCensored == 1) %>% 
+  group_by(Days) %>% 
+  summarise(n=n()) %>% 
+  filter(n>1)
+#many tied event times, use efron method
+
+#plotting the log hazard ratios
+hazard_plot <- plot(survfit(Surv(Days,EventCensored) ~ symptomatic_bin, data=TimeToDataAdvEpitope), col=c("black", "red"), fun="cloglog", xlab="Log(Days)", ylab="Log Hazard")
+
+saveRDS(hazard_plot, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_hazardplot.RDS"))
+
+#We want to do the analyses only after 60 days due to sampling bias and ph assumption
+
+#Create a binary variable for before and after 60 days
+TimeToDataAdvEpitope <- TimeToDataAdvEpitope %>% 
+  mutate(cutoff_60=ifelse(Days>60,1,0))
+
+TimeToDataAdvEpitope_60 <- TimeToDataAdvEpitope %>% filter(cutoff_60==1)
+
+# survival plot
+homol_fit_surv_2<-survfit(Surv(Days,EventCensored)~symptomatic_bin,data=TimeToDataAdvEpitope_60)
+#Calculate proportion reinfected after 1 year stratified by symptomaticity
+summary(homol_fit_surv_2,times=365.25)
+
+homol_fig_2 <- ggsurvplot(homol_fit_surv_2,risk.table = TRUE,
+                xlab=("Time in days"),
+                ylab=("Probability of survival without reinfection"),
+                font.main = c(12),
+                font.x = c(10),
+                font.y = c(10),
+                font.tickslab = c(8),
+                fontsize = 4,
+                risk.table.fontsize = 4,
+                palette = c("#00BFC4", "#F8766D"),
+                tables.theme = theme_cleantable(),
+                tables.height = 0.25,
+                tables.col = "strata",
+                legend = "none",
+                legend.title = "Index infection",
+                legend.labs = c("Asx", "Sx"),
+                conf.int = TRUE,title="Time to reinfection",xlim=c(0,400))
+
+homol_fig_2
+
+saveRDS(homol_fig_2, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_homol_fig_cutoff60.RDS"))
+
+#calculating and plotting HRs
+
+TimeToDataAdvEpitope_60 <- TimeToDataAdvEpitope_60 %>%
+  ungroup()%>%
+  add_count(AAs)%>%
+  mutate(freq = n)%>%
+  mutate(FrequencyCat=case_when(ntile(freq, 100) > 50~paste0("top"),
+                              ntile(freq, 100) < 50~paste0("bottom")))%>%
+mutate(FrequencyCat=factor(FrequencyCat,levels=c("bottom","top")))
+
+
+model <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + ageCat + freq+mosquito_prev_2weeks_cat+(1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron")
+
+summary(model)
+#HR: 0.64 (0.4525028 0.8915091) ***cfm sees .63 (0.4508199 0.887919) This is stochastic because of the random effects added. Will set seed at the top and get final numbers later.
+exp(confint(model,method="Wald"))
+
+
+coeff1<-fixef(model)
+coxmetable1<-as.data.frame(exp(confint(model)))
+coxmetable1<-cbind(coxmetable1,exp(coeff1))
+coxmetable1$label<-row.names(coxmetable1)
+coxmetable1$label[1]="Symptomatic"
+coxmetable1$label[2]="Male"
+coxmetable1$label[3]="Age 5 - 15"
+coxmetable1$label[4]="Age >15"
+coxmetable1$label[5]="Type prevalence"
+coxmetable1$label[6]="Mosquitoes > 50"
+coxmetable1
+coxplot1=ggplot(coxmetable1,aes(y=label,x=exp(coeff1),xmin=`2.5 %`, xmax=`97.5 %`))+
+  geom_pointrange(size=1,shape=18)+
+  geom_vline(xintercept=1, lty=2)+
+  theme_bw()+
+  xlab("Adj. HR (95%)")+
+  ylab("")+
+  scale_x_continuous(trans="log", breaks=c(0.5, 1, 2))
+coxplot1
+
+saveRDS(coxplot1, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_coxme_fig.RDS"))
+
+```
+
+## Comparing epitope frequncies in infections removed from the dataset and those maintained
+```{r}
+
+
+epitope_props <- TimeToDataAdvEpitope %>%
+  mutate(cutoff_60 = factor(cutoff_60), AAs = factor(AAs)) %>%
+  group_by(cutoff_60) %>%
+  mutate(n_events = n()) %>%
+  group_by(cutoff_60, AAs) %>%
+  summarise(n_AAs = n(), prop_AAs = n_AAs/n_events) %>%
+  complete(cutoff_60, AAs, fill = list(n_AAs = 0, prop_AAs = 0)) %>%
+  unique()
+
+
+freq_compare <- epitope_props %>%
+  select(-n_AAs) %>%
+  pivot_wider(values_from = prop_AAs, names_from = cutoff_60, names_prefix = "cutoff60_") %>%
+  ggplot(aes(x = cutoff60_1, y = cutoff60_0)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0) +
+  scale_x_continuous(limits = c(0,0.16)) +
+  scale_y_continuous(limits = c(0,0.16)) +
+  labs(x = "Epitope frequency in samples with\ntime to reinfection 60+ days", y = "Epitope frequency in samples with\ntime to reinfection < 60 days") +
+  theme_bw()
+
+freq_compare
+
+saveRDS(freq_compare, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_freq_compare_cutoff60.RDS"))
+
+
+epitope_props %>%
+  arrange(AAs) %>%
+  ungroup() %>%
+  summarise(wilcoxp = wilcox.test(prop_AAs[cutoff_60 == 1], prop_AAs[cutoff_60 == 0], paired = TRUE)$p.value) #p = 0.556, no sig difference
+
+
+
+```
+
+## Survival time by individual
+We want to compare within-individual survival times between asymptomatic and symptomatic index infections
+```{r}
+indiv_times_fig <- TimeToDataAdvEpitope_60 %>%
+    filter(EventCensored == 1) %>%
+    group_by(unq_memID) %>%
+    mutate(n_samples = n()) %>%
+    group_by(unq_memID, symptomatic_status) %>%
+    summarise(med = median(Days), avg = mean(Days), min = min(Days), max = max(Days), n = n(), prop = n/n_samples) %>%
+  ungroup() %>%
+  complete(unq_memID, symptomatic_status, fill = list(med = 0, avg = 0, min = 0, max = 0, n = 0, prop = 0)) %>%
+  unique() %>%
+  pivot_wider(names_from = symptomatic_status, values_from = 3:8) %>%
+  #filter(`prop_symptomatic infection` != 0 & `prop_asymptomatic infection` != 0) %>%
+  mutate(n_events = `n_symptomatic infection` + `n_asymptomatic infection`) %>%
+  ggplot(aes(x = `med_symptomatic infection`, y = `med_asymptomatic infection`)) +
+  geom_point(aes(color = `prop_symptomatic infection`, size = n_events)) +
+  scale_color_viridis_c() +
+  geom_abline(slope = 1, intercept = 0) +
+  #geom_errorbar(aes(ymin = `min_asymptomatic infection`, ymax = `max_asymptomatic infection`)) +
+  #geom_errorbarh(aes(xmin = `min_symptomatic infection`, xmax = `max_symptomatic infection`)) +
+  labs(x = "Days to homologous reinfection\nafter symptomatic infection", y = "Days to homologous reinfection\nafter asymptomatic infection", size = "Index events (n)", color = "Proportion symptomatic\nindex events") +
+  scale_x_continuous(limits = c(0,360)) +
+  scale_y_continuous(limits = c(0,360)) +
+  theme_bw()
+
+indiv_times_fig
+
+saveRDS(indiv_times_fig, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_individual_strat_homol_time.RDS"))
+
+
+
+```
+
+
+
+
+# Random reinfection
+
+## Permuted time to infection distributions
+```{r}
+
+#get data into shape
+set.seed(1)
+for_perm <- HumanData%>%
+  mutate(symptomatic_status = ifelse(is.na(main_exposure_primary_case_def), as.character(main_outcome_primary_case_def),as.character(main_exposure_primary_case_def))) %>%
+  arrange(unq_memID, sample_id_date) %>% 
+  group_by(unq_memID) %>%
+  #add columns for previous symptomatic status so that we can filter out infections within 14 days of a symptomatic infection
+  mutate(Sx_prev = lag(symptomatic_status,1),
+         days_since_prev = ymd(sample_id_date) - ymd(lag(sample_id_date,1))) %>%
+  #remove positive samples within 14 days of a symptomatic infection (there are 25 of them)
+  filter(Sx_prev != "symptomatic infection"| is.na(Sx_prev) | days_since_prev > days(14) | pf_pcr_infection_status != "positive") %>%
+  ungroup() %>%
+  arrange(unq_memID, sample_id_date) %>% 
+  group_by(unq_memID) %>%
+#Add a number to each sample
+  mutate(number=1)%>%
+  mutate(samplenumber=cumsum(number))%>%
+#max sample number denote the final sample
+  mutate(samplemax=max(samplenumber))%>%
+#Slim down the dataset
+  select(unq_memID,pf_pcr_infection_status,sample_id_date,sample_name_dbs,age_y_baseline,gender,samplenumber,samplemax,pfr364Q_std_combined, symptomatic_status, mosquito_prev_2weeks_cat)%>%
+#Bring in haplotype data
+  right_join(aadata_to_export)%>%
+  ungroup() %>%
+  mutate(ageCat = case_when(age_y_baseline <= 5 ~ "<5",
+                              age_y_baseline >5 & age_y_baseline < 15 ~ "5-15",
+                              age_y_baseline >= 15 ~ ">15"))%>%
+    mutate(ageCat=factor(ageCat,levels=c("<5","5-15",">15"))) 
+
+#define function for permutation
+perm <- function(data = for_perm) {
+  perm_data <- for_perm %>%
+    group_by(is.na(AAs)) %>%
+    mutate(AAsrandom = sample(AAs)) %>%
+    ungroup() %>%
+    separate_rows(AAsrandom)%>%
+    group_by(unq_memID, AAsrandom)%>% 
+  #Uncleared haplotypes are defined as haplotypes that occur in two subsequent samples - note this where one should check if the dates are handled correctly ie. counted from end to start of each haplotype
+    mutate(toNext=case_when(samplenumber==lead(samplenumber,1)-1 & symptomatic_status == "asymptomatic infection" ~ "uncleared",
+                          samplenumber==lead(samplenumber,1)-1 & symptomatic_status == "symptomatic infection" ~ paste0(as.Date(lead(sample_id_date,1)) - as.Date(sample_id_date)),
+                          samplenumber != lead(samplenumber,1)-1 ~ paste0(as.Date(lead(sample_id_date,1)) - as.Date(sample_id_date))))%>%
+  #Remove samples without AAs and uncleared AAs
+    ungroup()%>%
+    filter(!is.na(AAsrandom))%>%
+    filter(is.na(toNext)|toNext!="uncleared")%>%
+   # filter(!toNext=="uncleared"&!toNext=="same")%>%
+  #Add censoring criteria ie if there is no next sample, time to end of study is calculated and EventCensored=0 indicate that
+    mutate(EventCensored = if_else(toNext!="NA","1","NA","0"))%>%
+    mutate(Days = if_else(EventCensored=="1",paste0(toNext),paste0(as.Date("20180731","%Y%m%d") - as.Date(sample_id_date))))%>%
+    #remove final positive samples as they are uncleared
+    filter(samplenumber!=samplemax)%>%
+    mutate(Days=as.numeric(Days), cutoff_60=ifelse(Days>60,1,0))%>%
+    mutate(EventCensored=as.numeric(EventCensored))
+
+  return(perm_data)
+
+}
+
+
+#perform permutations 1000x
+perm_data <- lapply(1:1000, function(x){
+  perm(for_perm) %>%
+    mutate(perm = x) %>%
+    filter(cutoff_60 ==1)
+})
+
+
+
+perm_plot <- ggplot(perm_data %>% bind_rows() %>% filter(EventCensored == 1, cutoff_60 == 1), aes(x = Days, color = as.character(perm))) +
+  geom_density() +
+  scale_color_manual(values = replicate("lightgrey", n = 1000))+
+  #geom_density(data = perm_data %>% bind_rows() %>% filter(EventCensored == 1, perm %in% chosen_curve$perm), mapping = aes(x = Days), color = "black")+
+  labs(y = "Density", x = "Time to reinfection (randomized)") +
+  theme_bw() +
+  theme(legend.position = "none")
+
+perm_plot
+
+saveRDS(perm_plot, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_perm_data_time_dist.RDS"))
+
+```
+
+
+## Overall survival in randomized datasets
+Look at time to reinfection in the 1000 datasets
+```{r}
+surv_data <- fortify(survfit(Surv(Days,EventCensored)~1,data=TimeToDataAdvEpitope_60))
+
+
+perm_surv_overall <- lapply(1:1000, function(x){
+  survfit(Surv(Days,EventCensored)~1,data=perm_data[[x]]) %>%
+  fortify()
+}) %>%
+  bind_rows(.id = "perm")
+
+
+random_overall_avg <- perm_surv_overall %>%
+  group_by(time) %>%
+  summarise(med_surv = median(surv), mean_surv = mean(surv), min_surv = min(surv), max_surv = max(surv), lowerCI = median(lower), upperCI = median(upper))
+
+random_overall_addforplot <- random_overall_avg %>%
+  arrange(time) %>%
+  mutate(time = lead(time, 1)) %>%
+  bind_rows(random_overall_avg)
+  
+
+surv_data_forfig <- surv_data %>%
+  arrange(time) %>%
+  mutate(time = lead(time, 1)) %>%
+  bind_rows(surv_data) %>%
+  rename(med_surv = surv, lowerCI = lower, upperCI = upper) %>%
+  select(time, med_surv, lowerCI, upperCI) %>%
+  mutate(dataset = "Homologous") %>%
+  bind_rows(random_overall_addforplot %>%
+          select(time, med_surv, lowerCI, upperCI) %>%
+          mutate(dataset = "Random"))
+
+
+homol_random_fig <- surv_data_forfig %>%
+  ggplot(aes(x = time, y = med_surv, color = dataset)) +
+  geom_line(aes(x = time, y = med_surv))+
+  geom_line(data = tibble(time = c(0,61,0,61), med_surv = c(1,1,1,1), dataset = c("Homologous","Homologous","Random","Random")))+
+  geom_ribbon(aes(x = time, y = med_surv, ymin = lowerCI, ymax = upperCI, fill = dataset), alpha = 0.3, color = NA)+
+  scale_color_grey(start = 0.6, end = 0.3) +
+  scale_fill_grey(start = 0.6, end = 0.3) +
+  labs(color = "", fill = "", y = "Median probability of survival without reinfection", x = "Time in days") +
+  scale_y_continuous(limits = c(0,1))+
+  theme_bw()
+
+homol_random_fig
+
+saveRDS(homol_random_fig, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_homolvrandom_survival.RDS"))
+
+
+```
+
+
+
+## Symptomaticity-stratified survival and log-rank tests on randomized datasets
+```{r}
+#do survival analyses on all of the permuted datasets
+perm_surv <- lapply(1:1000, function(x){
+  survfit(Surv(Days,EventCensored)~symptomatic_status,data=perm_data[[x]])
+})
+
+perm_survdiff <- lapply(1:1000, function(x){
+  survdiff(Surv(Days,EventCensored)~symptomatic_status,data=perm_data[[x]])
+})
+
+
+perm_survdiff_t <- perm_survdiff %>%
+  transpose()
+
+
+data_survdiff <- survdiff(Surv(Days,EventCensored)~symptomatic_status,data=TimeToDataAdvEpitope_60)
+
+
+random_logrank_figure <- tibble(chisq = unlist(perm_survdiff_t$chisq)) %>%
+  ggplot() +
+  geom_histogram(aes(x = chisq), bins = 100) +
+  #geom_vline(xintercept = c(0.001, 5.024)) +
+  geom_point(mapping = aes(x = data_survdiff$chisq, y = 0), color = "darkred", size = 5) +
+  labs(y = "Count", x = "Test Statistic") +
+  theme_bw()
+
+random_logrank_figure
+
+saveRDS(random_logrank_figure, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_random_logrank_chisq_fig.RDS"))
+
+nrow(tibble(chisq = unlist(perm_survdiff_t$chisq)) %>%
+       filter(chisq < 0.001 | chisq > 5.024))
+
+nrow(tibble(chisq = unlist(perm_survdiff_t$chisq)) %>%
+       filter(chisq <= data_survdiff$chisq))/1000
+
+```
+
+
+### Figure for stratified random curves
+```{r}
+
+random_all <- lapply(1:1000, function(x){
+  fortify(perm_surv[[x]])
+}) %>%
+  bind_rows(.id = "perm")
+
+
+random_SxAsx_avg <- random_all %>%
+  group_by(time, strata) %>%
+  summarise(med_surv = median(surv), mean_surv = mean(surv), min_surv = min(surv), max_surv = max(surv), lowerCI = median(lower), upperCI = median(upper))
+
+random_SxAsx_addforplot <- random_SxAsx_avg %>%
+  group_by(strata) %>%
+  arrange(time) %>%
+  mutate(time = lead(time, 1)) %>%
+  bind_rows(random_SxAsx_avg)
+
+
+random_strata_fig <- random_SxAsx_addforplot %>%
+  ggplot(aes(x = time, y = med_surv, color = factor(strata, levels = c("symptomatic infection","asymptomatic infection"), labels = c("Sx", "Asx")))) +
+  geom_line(aes(x = time, y = med_surv))+
+  geom_line(data = tibble(time = c(0,61,0,61), med_surv = c(1,1,1,1), strata = c("asymptomatic infection","asymptomatic infection","symptomatic infection","symptomatic infection")))+
+  geom_ribbon(aes(x = time, y = med_surv, ymin = lowerCI, ymax = upperCI, fill = factor(strata, levels = c("symptomatic infection","asymptomatic infection"), labels = c("Sx", "Asx"))), alpha = 0.3, color = NA)+
+  labs(color = "Index exposure", fill = "Index exposure", y = "Median probability of survival without reinfection", x = "Time in days") +
+  scale_y_continuous(limits = c(0,1))+
+  theme_bw()
+
+random_strata_fig
+
+saveRDS(random_strata_fig, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_random_strat_survival.RDS"))
+
+```
+
+
+## Hazard ratio for random reinfection
+Run the coxme model on permuted datasets to get an estimate of the null aHR
+```{r}
+
+random_coxme <- lapply(1:1000, function(x){
+  temp <- perm_data[[x]] %>%
+    add_count(AAs)%>%
+    mutate(freq = n)%>%
+    mutate(FrequencyCat=case_when(ntile(freq, 100) > 50~paste0("top"),
+                                ntile(freq, 100) < 50~paste0("bottom")))%>%
+      mutate(FrequencyCat=factor(FrequencyCat,levels=c("bottom","top")))
+  
+    coxme(Surv(Days,EventCensored) ~ symptomatic_status + gender + ageCat + freq+mosquito_prev_2weeks_cat+(1|unq_memID), data = temp, ties = "efron")
+  })
+
+
+random_coxme_t <- random_coxme %>%
+  transpose()
+
+
+random_coxme_coeff <- random_coxme_t$coefficients %>%
+  bind_rows(.id = "perm") %>%
+  mutate(across(2:7, exp))
+
+
+random_coxme_confint <- lapply(1:1000, function(x) {
+  exp(confint(random_coxme[[x]])) %>%
+    data.frame() %>%
+    rownames_to_column()
+}) %>%
+  bind_rows(.id = "perm") %>%
+  rename("lower" = "X2.5..", "upper" = "X97.5..")
+
+random_confint_summary <- random_coxme_confint %>%
+  group_by(rowname) %>%
+  summarise(lower = median(lower), upper = median(upper)) %>%
+  rename("variable" = "rowname")
+
+
+random_aHR_fig <- random_coxme_coeff %>%
+  pivot_longer(2:7, names_to = "variable", values_to = "aHR") %>%
+  group_by(variable) %>%
+  summarise(med = median(aHR), min = min(aHR), max = max(aHR)) %>%
+  left_join(random_confint_summary) %>%
+  mutate(variable = factor(variable, levels = c("symptomatic_statsussymptomatic infection", "mosquito_prev_2weeks_cat>50 mosquitoes", "gendermale", "freq", "ageCat5-15", "ageCat>15"), labels = c("Symptomatic", "Mosquitoes > 50", "Male", "Type prevalence", "Age 5-15", "Age > 15"))) %>%
+  ggplot() +
+  ggstance::geom_pointrangeh(aes(x = med, xmin = lower, xmax = upper, y = variable)) +
+  theme_bw()
+
+saveRDS(random_aHR_fig, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_random_coxme_fig.RDS"))
+
+
+
+```
+
+
+rmarkdown::render("C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/Once Bitten/epitopes/MozzieAminoAcidAnalysis/homologous_reinfection_choose_epitope.Rmd", output_file= paste0(CurrentEpitopeName, "_homologous_reinfection_", format(now(), "%Y%m%d_%H%M%S_"), ".html"), encoding = 'UTF-8', knit_root_dir = "C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/Once Bitten/")

@@ -1,0 +1,510 @@
+---
+title: "Epitope and nucleotide diversity"
+author: "Christine Markwalter"
+date: "12/8/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(dpi=300)
+knitr::opts_knit$set(root.dir = "C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/Once Bitten")
+grDevices::pdf.options(useDingbats = FALSE)
+library(Biostrings)
+#library(ggplot2) #redundant
+#library(dplyr) #redundant
+library(tidyverse)
+library(ggpmisc)
+library(lubridate)
+library(randomForest)
+
+library(survival)
+library(survminer)
+library(coxme)
+library(forestplot)
+
+library(ggfortify)
+library(ggseqlogo)
+library(arsenal)
+
+library(ggpubr)
+```
+
+#Human data
+```{r}
+HumanData<-read.csv("epitopes/MozzieAminoAcidAnalysis/Human demographic data/spat21_human_final_censored_data_for_dissertation_with_exposure_outcome_1MAR2020.csv")
+
+HDS<-HumanData %>% 
+  dplyr::select(sample_name_dbs,unq_memID,sample_id_date,main_outcome_primary_case_def,main_exposure_primary_case_def)%>%
+  filter(main_exposure_primary_case_def == "asymptomatic infection" | main_outcome_primary_case_def == "symptomatic infection") %>%
+  mutate(symptomatic_status = ifelse(is.na(main_exposure_primary_case_def), as.character(main_outcome_primary_case_def),as.character(main_exposure_primary_case_def))) %>%
+  dplyr::select(-c(main_exposure_primary_case_def,main_outcome_primary_case_def))
+```
+
+
+# csp
+
+## Load sequence data
+```{r, warning=F,message=F}
+
+csp_seqs <- Biostrings::readDNAStringSet("epitopes/MozzieAminoAcidAnalysis/spat21_CSP_uniqueSeqs_final_censored.fasta")
+
+
+csp_haplotypes<-read.csv("epitopes/MozzieAminoAcidAnalysis/Haplotype Data for Haplotype Prevalence/Summarized data/spat21_csp_summarized_haplotype_list_31DEC2019.csv")
+
+head(csp_seqs)
+head(csp_haplotypes)
+```
+
+
+## Remove mozzies
+
+```{r, warning=F,message=F}
+csp_haplotypes = csp_haplotypes %>%
+  filter(!(str_detect(sample_name_dbs,"H")) & !(str_detect(sample_name_dbs,"A")) | sample_name_dbs == "K14-170717-1A-R") 
+
+#make list of haplotypes found in human samples
+csp_haplotypelist=csp_haplotypes%>%
+  separate_rows(haplotype_list)%>%
+  summarise(HType=paste(unique(haplotype_list)))
+
+#Replace haplotype names to match them with seq names
+csp_haplotypelist$HType=sub('.', '', csp_haplotypelist$HType)
+csp_haplotypelist=csp_haplotypelist%>%
+  mutate(seqs=paste("Seq",HType,sep=""))
+
+length(csp_haplotypelist$HType)
+
+```
+
+## Translate nucleotide sequence to AAs
+
+```{r, warning=FALSE}
+#CSP is translated in reverse and starting at the 3rd nucleotide
+csp_DNAseqrev<-reverseComplement(csp_seqs)
+csp_DNAseqrev <- DNAStringSet(csp_DNAseqrev, start=3)
+length(unique(csp_DNAseqrev))
+
+csp_AAseq<-translate(csp_DNAseqrev, genetic.code=GENETIC_CODE, no.init.codon=FALSE,
+             if.fuzzy.codon="error")
+
+csp_AAseqmatrix<-consensusMatrix(csp_AAseq, as.prob = TRUE)
+csp_AArevmatrixvariant=csp_AAseqmatrix
+```
+
+Change sequences to dataframe and combine them with haplotype name to match with human data
+```{r}
+
+csp_AAdf<-as.data.frame(csp_AAseq)
+csp_AAdf<-cbind(seq = rownames(csp_AAdf), csp_AAdf)
+rownames(csp_AAdf)<-1:nrow(csp_AAdf)
+csp_AAdf$HType=paste("H",sub('...', '', csp_AAdf$seq),sep="")
+length(unique(csp_AAdf$x))
+
+```
+
+
+filter protein sequences only in haplotypes present in human samples
+```{r}
+csp_AAdf <- csp_AAdf%>%
+  filter(seq %in% csp_haplotypelist$seqs)
+length(unique(csp_AAdf$x))
+```
+
+
+removing sequences with stop codons
+```{r,eval=T}
+csp_AAdf$nstopcodon <- vcountPattern("*", csp_AAdf$x, max.mismatch=0)
+csp_AAdf%>%
+  group_by(nstopcodon)%>%
+  count()
+cat("number of stopcodons:", sum(csp_AAdf$nstopcodon), "\n")
+csp_AAdf=csp_AAdf%>%
+  filter(nstopcodon==0)
+cat("number of sequences without stop codons", length(csp_AAdf$x), "\n")
+cat("number of unique sequences",length(unique(csp_AAdf$x)))
+
+```
+
+Separating each samples haplotypes into individual rows and make them into a list of unique haplotypes
+
+```{r, warning=F,message=F}
+csp_haplotypesExp<-tidyr::separate_rows(csp_haplotypes, haplotype_list, sep=",")
+csp_haplotypesExp$HType<-csp_haplotypesExp$haplotype_list
+csp_MergHaploAA<-merge(csp_haplotypesExp,csp_AAdf,by="HType") %>%
+  select(-haplotype_list)
+dim(csp_MergHaploAA)
+#We lose 7 haplotype occurences because upon merging due to removing sequences with stop codons.
+
+csp_MergedData<-merge(HDS,csp_MergHaploAA,by="sample_name_dbs") %>%
+  select(-haplotype_reads, -nstopcodon) %>%
+  rowwise() %>%
+  mutate(cd4_epitope = paste0(substr(x,25,25),substr(x,28,28), substr(x,29,29), substr(x,31,31)), cd8_epitope = paste0(substr(x,59,59),substr(x,64,64), substr(x,66,66), substr(x,68,68)))
+```
+
+
+# cd4
+```{r}
+
+cd4_sunburst <- csp_MergedData %>%
+  group_by(cd4_epitope, HType) %>%
+  summarise(n_samples = n_distinct(sample_name_dbs))
+
+
+cd4_sunburst <- cd4_sunburst %>%
+  mutate(cd4_epitope = as.factor(cd4_epitope) %>% fct_reorder(n_samples, sum)) %>%
+  arrange(cd4_epitope, n_samples) %>%
+  mutate(HType = as.factor(HType) %>% fct_reorder2(cd4_epitope, n_samples))
+  
+
+lvl0 <- tibble(name = "Parent", value = 0, level = 0, fill = NA)
+lvl1 <- cd4_sunburst %>%
+  group_by(cd4_epitope) %>%
+  summarise(value = sum(n_samples)) %>%
+  ungroup() %>%
+  rename(name = cd4_epitope) %>%
+  mutate(level = 1, fill = name)
+
+lvl2 <- cd4_sunburst %>%
+  select(name = HType, value = n_samples, fill = cd4_epitope) %>%
+  mutate(level = 2)
+
+
+combined <- bind_rows(lvl0, lvl1, lvl2) %>%
+  arrange(level, value)
+
+
+cd4_sunburst_plot <- ggplot(combined, aes(x = as.factor(level), y = value, fill = fct_reorder(fill, value, sum), alpha = as.factor(level))) +
+  geom_col(width = 1, color = "white", size = 0.25, position = "stack") +
+  geom_text(data = combined %>% filter(level == 1, value > 10), mapping = aes(label = name), angle = c(-90,-90,-90,-75,-75,-60,-60,-45,-45,-45,-30,-20,-10,0,20,30,45,0,0,0,0,0,0), size = 2.5, position = position_stack(vjust = 0.5)) +
+  annotate("text",x = 1.1, y = 1, label = "Epitope type")+
+  annotate("text",x = 3.7, y = 1, label = "Haplotype") +
+  coord_polar(theta = "y") +
+  scale_alpha_manual(values = c("0" = 0, "1" = 1, "2" = 0.7), guide = "none") +
+  scale_x_discrete(breaks = NULL) +
+  scale_y_continuous(breaks = NULL) +
+  scale_fill_manual(values = c("#696969", "#556b2f","#8b4513","#483d8b","#008000","#008080","#000080","#9acd32","#32cd32","#8fbc8f","#8b008b","#b03060","#d2b48c","#00ced1","#ffa500","#dc143c","#00bfff","#f4a460","#0000ff","#f0e68c","#fa8072","#6495ed","#dda0dd","#b0e0e6","#ff1493","#7b68ee","#ee82ee"))+
+  labs(x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggsave(plot = cd4_sunburst_plot, "epitopes/MozzieAminoAcidAnalysis/cfm_figures/cd4_sunburst.png", width = 6, height = 6)
+
+
+```
+
+
+
+# cd8
+```{r}
+
+cd8_sunburst <- csp_MergedData %>%
+  group_by(cd8_epitope, HType) %>%
+  summarise(n_samples = n_distinct(sample_name_dbs))
+
+
+cd8_sunburst <- cd8_sunburst %>%
+  mutate(cd8_epitope = as.factor(cd8_epitope) %>% fct_reorder(n_samples, sum)) %>%
+  arrange(cd8_epitope, n_samples) %>%
+  mutate(HType = as.factor(HType) %>% fct_reorder2(cd8_epitope, n_samples))
+  
+
+lvl0 <- tibble(name = "Parent", value = 0, level = 0, fill = NA)
+lvl1 <- cd8_sunburst %>%
+  group_by(cd8_epitope) %>%
+  summarise(value = sum(n_samples)) %>%
+  ungroup() %>%
+  rename(name = cd8_epitope) %>%
+  mutate(level = 1, fill = name)
+
+lvl2 <- cd8_sunburst %>%
+  select(name = HType, value = n_samples, fill = cd8_epitope) %>%
+  mutate(level = 2)
+
+
+combined <- bind_rows(lvl0, lvl1, lvl2) %>%
+  arrange(level, value)
+
+cd8_sunburst_plot <- ggplot(combined, aes(x = as.factor(level), y = value, fill = fct_reorder(fill, value, sum), alpha = as.factor(level))) +
+  geom_col(width = 1, color = "white", size = 0.25, position = "stack") +
+  geom_text(data = combined %>% filter(level == 1, value > 10), mapping = aes(label = name), size = 2.5, position = position_stack(vjust = 0.5), angle = c(-90,-90,-75,-70,-45,0,0,0,0,0,0)) +
+  annotate("text",x = 1.1, y = 1, label = "Epitope type")+
+  annotate("text",x = 3.7, y = 1, label = "Haplotype") +
+  coord_polar(theta = "y") +
+  scale_alpha_manual(values = c("0" = 0, "1" = 1, "2" = 0.7), guide = "none") +
+  scale_x_discrete(breaks = NULL) +
+  scale_y_continuous(breaks = NULL) +
+  scale_fill_manual(values = c("#008080","#000080","#9acd32","#32cd32","#8fbc8f","#8b008b","#b03060","#d2b48c","#00ced1","#ffa500","#dc143c","#00bfff","#f4a460","turquoise")) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggsave(plot = cd8_sunburst_plot, "epitopes/MozzieAminoAcidAnalysis/cfm_figures/cd8_sunburst.png", width = 6, height = 6)
+
+
+
+```
+
+
+#ama
+## Load sequence data
+```{r, warning=F,message=F}
+
+ama_seqs <- Biostrings::readDNAStringSet("epitopes/MozzieAminoAcidAnalysis/spat21_AMA_uniqueSeqs_final_censored.fasta")
+
+
+ama_haplotypes<-read.csv("epitopes/MozzieAminoAcidAnalysis/Haplotype Data for Haplotype Prevalence/Summarized data/spat21_ama_summarized_haplotype_list_31DEC2019.csv")
+
+head(ama_seqs)
+head(ama_haplotypes)
+```
+
+
+## Remove mozzies
+
+```{r, warning=F,message=F}
+ama_haplotypes = ama_haplotypes %>%
+  filter(!(str_detect(sample_name_dbs,"H")) & !(str_detect(sample_name_dbs,"A")) | sample_name_dbs == "K14-170717-1A-R") 
+
+#make list of haplotypes found in human samples
+ama_haplotypelist=ama_haplotypes%>%
+  separate_rows(haplotype_list)%>%
+  summarise(HType=paste(unique(haplotype_list)))
+
+#Replace haplotype names to match them with seq names
+ama_haplotypelist$HType=sub('.', '', ama_haplotypelist$HType)
+ama_haplotypelist=ama_haplotypelist%>%
+  mutate(seqs=paste("Seq",HType,sep=""))
+
+length(ama_haplotypelist$HType)
+
+```
+
+## Translate nucleotide sequence to AAs
+
+```{r, warning=FALSE}
+
+length(unique(ama_seqs))
+#Correct start of translation AMA is translated from the 3rd nucleotide
+ama_seqs3<- DNAStringSet(ama_seqs, start=3)
+ama_AAseq=translate(ama_seqs3)
+length(unique(ama_AAseq))
+
+ama_AAseqmatrix<-consensusMatrix(ama_AAseq, as.prob = TRUE)
+
+```
+
+Change sequences to dataframe and combine them with haplotype name to match with human data
+```{r}
+
+ama_AAdf<-as.data.frame(ama_AAseq)
+ama_AAdf<-cbind(seq = rownames(ama_AAdf), ama_AAdf)
+rownames(ama_AAdf)<-1:nrow(ama_AAdf)
+ama_AAdf$HType=paste("H",sub('...', '', ama_AAdf$seq),sep="")
+length(unique(ama_AAdf$x))
+
+```
+
+filter protein sequences only in haplotypes present in human samples
+```{r}
+ama_AAdf <- ama_AAdf%>%
+  filter(seq %in% ama_haplotypelist$seqs)
+length(unique(ama_AAdf$x))
+```
+
+
+removing sequences with stop codons
+```{r,eval=T}
+ama_AAdf$nstopcodon <- vcountPattern("*", ama_AAdf$x, max.mismatch=0)
+ama_AAdf%>%
+  group_by(nstopcodon)%>%
+  count()
+cat("number of stopcodons:", sum(ama_AAdf$nstopcodon), "\n")
+ama_AAdf=ama_AAdf%>%
+  filter(nstopcodon==0)
+cat("number of sequences without stop codons", length(ama_AAdf$x), "\n")
+cat("number of unique sequences",length(unique(ama_AAdf$x)))
+
+```
+
+Separating each samples haplotypes into individual rows and make them into a list of unique haplotypes
+
+```{r, warning=F,message=F}
+ama_haplotypesExp<-tidyr::separate_rows(ama_haplotypes, haplotype_list, sep=",")
+ama_haplotypesExp$HType<-ama_haplotypesExp$haplotype_list
+ama_MergHaploAA<-merge(ama_haplotypesExp,ama_AAdf,by="HType") %>%
+  select(-haplotype_list)
+dim(ama_MergHaploAA)
+#We lose 7 haplotype occurences because upon merging due to removing sequences with stop codons.
+
+ama_MergedData<-merge(HDS,ama_MergHaploAA,by="sample_name_dbs") %>%
+  select(-haplotype_reads, -nstopcodon) %>%
+  rowwise() %>%
+  mutate(ama_epitope = paste0(substr(x,36,36),substr(x,44,44), substr(x,77,77), substr(x,90,90)))
+```
+
+## plot
+```{r}
+
+ama_sunburst <- ama_MergedData %>%
+  group_by(ama_epitope, HType) %>%
+  summarise(n_samples = n_distinct(sample_name_dbs))
+
+
+ama_sunburst <- ama_sunburst %>%
+  mutate(ama_epitope = as.factor(ama_epitope) %>% fct_reorder(n_samples, sum)) %>%
+  arrange(ama_epitope, n_samples) %>%
+  mutate(HType = as.factor(HType) %>% fct_reorder2(ama_epitope, n_samples))
+  
+
+lvl0 <- tibble(name = "Parent", value = 0, level = 0, fill = NA)
+lvl1 <- ama_sunburst %>%
+  group_by(ama_epitope) %>%
+  summarise(value = sum(n_samples)) %>%
+  ungroup() %>%
+  rename(name = ama_epitope) %>%
+  mutate(level = 1, fill = name)
+
+lvl2 <- ama_sunburst %>%
+  select(name = HType, value = n_samples, fill = ama_epitope) %>%
+  mutate(level = 2)
+
+
+combined <- bind_rows(lvl0, lvl1, lvl2) %>%
+  arrange(level, value)
+
+
+ama_sunburst_plot <- ggplot(combined, aes(x = as.factor(level), y = value, fill = fct_reorder(fill, value, sum), alpha = as.factor(level))) +
+  geom_col(width = 1, color = "white", size = 0.25, position = "stack") +
+  geom_text(data = combined %>% filter(level == 1, value > 21 ), mapping = aes(label = name), angle = c(-75,-75,-65,-60,-45,-30,-30,-15,-15,0,10,20,45,45,60,60,0,0,0,0,0,0,0), size = 2.5, position = position_stack(vjust = 0.5)) +
+  annotate("text",x = 1.1, y = 1, label = "Epitope type")+
+  annotate("text",x = 3.7, y = 1, label = "Haplotype") +
+  coord_polar(theta = "y") +
+  scale_alpha_manual(values = c("0" = 0, "1" = 1, "2" = 0.7), guide = "none") +
+  scale_x_discrete(breaks = NULL) +
+  scale_y_continuous(breaks = NULL) +
+  scale_fill_manual(values = c("#808080",	"#2f4f4f",	"#556b2f",	"#8b4513",	"#a52a2a", "#2e8b57",	"#228b22",	"#191970",	"#808000",	"#008b8b",	"#cd853f",	"#4682b4",	"#9acd32",	"#00008b",	"#32cd32",	"#daa520",	"#8fbc8f",	"#800080",	"#b03060",	"#d2b48c",	"#ff0000",	"#00ced1",	"#ff8c00",	"#ffd700",	"#0000cd",	"#00ff00",	"#ba55d3",	"#00fa9a",	"#00bfff",	"#a020f0",	"#f08080",	"#adff2f",	"#ff6347",	"#d8bfd8",	"#ff00ff",	"#1e90ff",	"#f0e68c",	"#b0e0e6",	"#90ee90",	"#7b68ee",	"#7fffd4",	"#ff69b4"))+
+  labs(x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggsave(plot = ama_sunburst_plot, "epitopes/MozzieAminoAcidAnalysis/cfm_figures/ama_sunburst.png", width = 6, height = 6)
+
+
+```
+
+
+#MOI figure
+```{r}
+
+csp_moi <- csp_MergedData %>%
+  group_by(sample_name_dbs) %>%
+  summarise(HType_moi = mean(haplotype_number), cd4_moi = n_distinct(cd4_epitope), cd8_moi = n_distinct(cd8_epitope))
+
+ama_moi <- ama_MergedData %>%
+  group_by(sample_name_dbs) %>%
+  summarise(HType_moi = mean(haplotype_number), ama_moi = n_distinct(ama_epitope))
+
+
+my.formula <- y ~ x+0
+
+
+cd4_moi_plot <- ggplot(csp_moi,aes(x=HType_moi, y=cd4_moi))+
+  geom_point(alpha=0.5)+
+  coord_cartesian(xlim=c(0,18),ylim=c(0,18))+
+  geom_smooth(method = lm,color="black")+
+  labs(title=paste0("CD4+ epitope MOI corr."))+
+  theme_bw()+
+  stat_poly_eq(formula = my.formula,
+               aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")),
+               parse = TRUE)+
+  xlab("Haplotype MOI")+
+  ylab("Epitope MOI")
+
+cd8_moi_plot <- ggplot(csp_moi,aes(x=HType_moi, y=cd8_moi))+
+  geom_point(alpha=0.5)+
+  coord_cartesian(xlim=c(0,18),ylim=c(0,18))+
+  geom_smooth(method = lm,color="black")+
+  labs(title=paste0("CD8+ epitope MOI corr."))+
+  theme_bw()+
+  stat_poly_eq(formula = my.formula,
+               aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")),
+               parse = TRUE)+
+  xlab("Haplotype MOI")+
+  ylab("Epitope MOI")
+
+ama_moi_plot <- ggplot(ama_moi,aes(x=HType_moi, y=ama_moi))+
+  geom_point(alpha=0.5)+
+  coord_cartesian(xlim=c(0,18),ylim=c(0,18))+
+  geom_smooth(method = lm,color="black")+
+  labs(title=paste0("AMA-1 epitope MOI corr."))+
+  theme_bw()+
+  stat_poly_eq(formula = my.formula,
+               aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")),
+               parse = TRUE)+
+  xlab("Haplotype MOI")+
+  ylab("Epitope MOI")
+
+
+```
+
+
+# Combining figures
+```{r}
+combined_fig <- ggarrange(ggarrange(cd4_moi_plot +
+                      labs(x = NULL, y = NULL),
+            cd4_sunburst_plot,
+            nrow = 1),
+  ggarrange(cd8_moi_plot +
+              labs(x = NULL),
+            cd8_sunburst_plot,
+            nrow = 1),
+  ggarrange(ama_moi_plot +
+              labs(y = NULL),
+            ama_sunburst_plot,
+            nrow = 1),
+  ncol = 1)
+
+ggsave(plot = combined_fig, "epitopes/MozzieAminoAcidAnalysis/cfm_figures/moi_sunburst.png", width = 9, height = 12)
+
+
+alt_combined_fig <- ggarrange(ggarrange(cd4_sunburst_plot +
+                                          labs(title = "CD4+") +
+                                          theme(plot.title = element_text(hjust = 0.5), plot.margin = unit(c(-2,0,-5,0), "cm")),
+            cd8_sunburst_plot +
+                                          labs(title = "CD8+") +
+                                          theme(plot.title = element_text(hjust = 0.5), plot.margin = unit(c(-2,0,-5,0), "cm")),
+            ama_sunburst_plot +
+                                          labs(title = "AMA-1") +
+                                          theme(plot.title = element_text(hjust = 0.5), plot.margin = unit(c(-2,0,-5,0), "cm")),
+            nrow = 1,
+            widths = c(1,1,1)),
+          ggarrange(NULL,
+            cd4_moi_plot +
+              labs(x = NULL, title = NULL) +
+              theme(plot.margin = unit(c(-4,0,0,0), "cm")),
+            NULL,
+            cd8_moi_plot +
+              labs(y = NULL, title = NULL) +
+              theme(plot.margin = unit(c(-4,0,0,0), "cm")),
+            NULL,
+            ama_moi_plot +
+              labs(x = NULL, y = NULL, title = NULL)+
+              theme(plot.margin = unit(c(-4,0,0,0), "cm")),
+            NULL,
+            nrow = 1,
+            widths = c(0.1,1.1,0.4,1,0.4,1,0.2),
+            align = "h"),
+          nrow = 2,
+          heights = c(6,1),
+          align = "v")
+
+
+ggsave(plot = alt_combined_fig, "epitopes/MozzieAminoAcidAnalysis/cfm_figures/alt_moi_sunburst.png", width = 16, height = 12)
+
+
+```
+
+
+
+

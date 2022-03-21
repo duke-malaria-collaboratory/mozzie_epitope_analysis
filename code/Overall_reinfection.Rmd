@@ -1,0 +1,317 @@
+---
+title: "Overall risk of reinfection"
+author: "Christine Markwalter"
+date: "11/23/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(dpi=300)
+knitr::opts_knit$set(root.dir = "C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/Once Bitten")
+grDevices::pdf.options(useDingbats = FALSE)
+library(Biostrings)
+#library(ggplot2) #redundant
+#library(dplyr) #redundant
+library(tidyverse)
+library(ggpmisc)
+library(lubridate)
+library(randomForest)
+
+library(survival)
+library(survminer)
+library(coxme)
+library(forestplot)
+
+library(ggfortify)
+library(ggseqlogo)
+library(arsenal)
+
+library(ggpubr)
+```
+
+# Read in data
+```{r, warning=F,message=F}
+HumanData<-read.csv("epitopes/MozzieAminoAcidAnalysis/Human demographic data/spat21_human_final_censored_data_for_dissertation_with_exposure_outcome_1MAR2020.csv")
+
+season <- readRDS("epitopes/MozzieAminoAcidAnalysis/Mosquito demographic data/spat21_mosquito_anopheles_merged_data_18JAN2019.RDS") %>%
+  mutate(collection_year = year(collection_date)) %>%
+  group_by(collection_year, collection_week) %>%
+  mutate(n_week = n()) %>%
+  mutate(week_year = paste0(collection_week,"_", collection_year)) %>%
+  ungroup() %>%
+  arrange(collection_date) %>%
+  select(week_year, n_week) %>%
+  unique() %>%
+  mutate(mosquito_prev2weeks = lag(n_week,2) + lag(n_week,1)) %>%
+  mutate(mosquito_prev_2weeks_cat = ifelse(mosquito_prev2weeks <= 50, "0 - 50 mosquitoes", ifelse(mosquito_prev2weeks > 50, "> 50 mosquitoes", NA))) %>%
+  select(week_year,mosquito_prev_2weeks_cat) %>%
+  unique()
+
+
+```
+
+
+# Shaping human data
+From Kelsey's CID paper: An asymptomatic infection was P. falciparum-positive by qPCR in a person lacking symptoms during a monthly follow-up visit. A symptomatic infection was P. falciparum-positive by RDT and qPCR in a person with at least 1 malaria symptom (ie, fever, aches, vomiting, diarrhea, chills, cough, or congestion) during a sick visit.
+
+A quick look at HumanData shows that there are 364 samples that were classified as neither asymptomatic nor symptomatic. Below are the pcr and rdt results for those samples:
+
+```
+pcr/rdt |  invalid   negative    positive
+--------| -------   --------    --------
+negative|    0       189           39
+positive|    2       117           17
+```
+ALL discordant pcr/rdt results from HumanData were left unclassified. Additionally, there were 17 samples from sick visits where rdt and pcr were both positive, but the symptoms that were reported were not malaria symptoms as defined above. The 189 pcr/rdt negative samples that were not classified originated from sick visits and not regular monthly visits (this shouldn't have any bearing on our analyses here).
+
+__Below, we want to determine whether infections are the start, middle, or end of an episode. We will do this by checking the pcr status of the previous and next infections, with the following exceptions:__
+
+**1) All symptomatic infections end an episode, since they received treatment**
+
+**2) Any infections within 14 days of a symptomatic infection will be removed from the dataset and assumed to be remnant parasites/DNA from a treated infection**
+
+
+```{r}
+HDS<-HumanData %>% 
+  dplyr::select(sample_name_dbs,unq_memID,sample_id_date,main_outcome_primary_case_def,main_exposure_primary_case_def)%>%
+  filter(main_exposure_primary_case_def == "asymptomatic infection" | main_outcome_primary_case_def == "symptomatic infection") %>%
+  mutate(symptomatic_status = ifelse(is.na(main_exposure_primary_case_def), as.character(main_outcome_primary_case_def),as.character(main_exposure_primary_case_def))) %>%
+  dplyr::select(-c(main_exposure_primary_case_def,main_outcome_primary_case_def))
+head(HDS)
+
+classified_infections <- HumanData %>%
+  select(unq_memID,pf_pcr_infection_status,sample_id_date,sample_name_dbs,age_y_baseline,gender,pfr364Q_std_combined, main_exposure_primary_case_def, main_outcome_primary_case_def)%>%
+  mutate(symptomatic_status = ifelse(is.na(main_exposure_primary_case_def), as.character(main_outcome_primary_case_def),as.character(main_exposure_primary_case_def))) %>%
+  arrange(unq_memID, sample_id_date) %>% 
+  group_by(unq_memID) %>% 
+  #add columns for previous and next infections so that we can filter out anything within 14 days of a symptomatic infection
+  mutate(pcr_next = lead(pf_pcr_infection_status,1),
+         pcr_prev = lag(pf_pcr_infection_status,1),
+         Sx_next = lead(symptomatic_status,1),
+         Sx_prev = lag(symptomatic_status,1),
+         days_since_prev = ymd(sample_id_date) - ymd(lag(sample_id_date,1))) %>%
+  #remove positive samples within 14 days of a symptomatic infection (there are 25 of them)
+  filter(Sx_prev != "symptomatic infection"| is.na(Sx_prev) | days_since_prev > days(14) | pf_pcr_infection_status != "positive") %>%
+  #do it again to see if there are any other positive samples within 14 days of a symptomatic infection
+  mutate(pcr_next = lead(pf_pcr_infection_status,1),
+         pcr_prev = lag(pf_pcr_infection_status,1),
+         Sx_next = lead(symptomatic_status,1),
+         Sx_prev = lag(symptomatic_status,1),
+         days_since_prev = ymd(sample_id_date) - ymd(lag(sample_id_date,1))) %>% #no more samples needed to be removed
+  select(-days_since_prev) %>%
+  #define whether samples are the the start middle or end of an infection
+  mutate(StartMiddleEnd=case_when(pf_pcr_infection_status=="negative" ~ "negative",
+                                  symptomatic_status == "symptomatic infection" & (pcr_prev == "negative" | is.na(pcr_prev) ) ~ "start+end",
+                                  symptomatic_status == "symptomatic infection" & pcr_prev == "positive" & Sx_prev == "symptomatic infection" ~ "start+end",
+                                  symptomatic_status == "symptomatic infection" & pcr_prev == "positive" & (Sx_prev == "asymptomatic infection" | is.na(Sx_prev)) ~ "end",
+                                  (symptomatic_status == "asymptomatic infection" | is.na(symptomatic_status)) & (pcr_prev == "negative" | is.na(pcr_prev)) & (pcr_next == "negative" | is.na(pcr_next)) ~ "start+end",
+                                  (symptomatic_status == "asymptomatic infection" | is.na(symptomatic_status)) & (pcr_prev == "negative" | is.na(pcr_prev)) & pcr_next == "positive" ~ "start",
+                                  (symptomatic_status == "asymptomatic infection" | is.na(symptomatic_status)) & pcr_prev == "positive" & Sx_prev == "symptomatic infection" & (pcr_next == "negative" | is.na(pcr_next)) ~ "start+end",
+                                  (symptomatic_status == "asymptomatic infection" | is.na(symptomatic_status)) & pcr_prev == "positive" & Sx_prev == "symptomatic infection" & pcr_next == "positive" ~ "start",
+                                  (symptomatic_status == "asymptomatic infection" | is.na(symptomatic_status)) & pcr_prev == "positive" & (Sx_prev == "asymptomatic infection" | is.na(Sx_prev)) & (pcr_next == "negative" | is.na(pcr_next)) ~ "end",
+                                  (symptomatic_status == "asymptomatic infection" | is.na(symptomatic_status)) & pcr_prev == "positive" & (Sx_prev == "asymptomatic infection" | is.na(Sx_prev)) & pcr_next == "positive" ~ "middle"))%>%
+  #remove pf negative samples
+  filter(pf_pcr_infection_status=="positive")%>%
+  #Remove middle samles
+  filter(StartMiddleEnd!="middle")%>%
+  #Make a start and end date variable
+  mutate(StartDate=case_when(StartMiddleEnd=="start"~paste(sample_id_date),
+                             StartMiddleEnd=="end"~paste(lag(sample_id_date,1)),
+                             StartMiddleEnd=="start+end"~paste(sample_id_date)))%>%
+  mutate(EndDate=case_when(StartMiddleEnd=="start"~paste(lead(sample_id_date,1)),
+                           StartMiddleEnd=="end"~paste(sample_id_date),
+                           StartMiddleEnd=="start+end"~paste(sample_id_date)))%>%
+  #Calculate time from end to next start
+  mutate(toNext = case_when(grepl("end",StartMiddleEnd)~paste(as.Date(lead(StartDate,1))-as.Date(EndDate))))%>%
+  #Remove start of infections
+  filter(!StartMiddleEnd=="start")%>%
+  #Add censoring for end of infections not followed by a reinfecion
+  mutate(EventCensored = if_else(toNext!="NA","1","0"))%>%
+  mutate(Days = if_else(EventCensored==1,paste0(toNext),paste0(as.Date("20180731","%Y%m%d") - as.Date(sample_id_date))))%>%
+  #Make age category
+  mutate(ageCat = case_when(age_y_baseline <= 5 ~ "<5",
+                            age_y_baseline >5 & age_y_baseline < 15 ~ "5-15",
+                            age_y_baseline >= 15 ~ ">15"))%>%
+    mutate(ageCat=factor(ageCat,levels=c("<5","5-15",">15")))
+
+# define symptomatic status
+classified_infections <- classified_infections %>%
+  filter(symptomatic_status %in% c("asymptomatic infection", "symptomatic infection")) %>%
+  dplyr::select(-c(main_exposure_primary_case_def,main_outcome_primary_case_def)) %>%
+  mutate(Days=as.numeric(Days))%>%
+  mutate(EventCensored=as.numeric(EventCensored))
+
+
+classified_infections  <- classified_infections %>%
+  mutate(collection_year = year(sample_id_date), collection_week = week(sample_id_date), week_year = paste0(collection_week,"_", collection_year)) %>%
+  ungroup() %>%
+  select(-collection_year, -collection_week) %>%
+  left_join(season)
+
+#there is missing data for the  first weeks of the study. In both cases, the number of mosquitoes in THAT week was > 50, so we will assume that the sum of the previous weeks was also > 50 We will use the mosquito counts closest to those weeks.
+
+classified_infections$mosquito_prev_2weeks_cat[classified_infections$week_year == "24_2017"] <- "> 50 mosquitoes"
+classified_infections$mosquito_prev_2weeks_cat[classified_infections$week_year == "25_2017"] <- "> 50 mosquitoes"
+classified_infections$mosquito_prev_2weeks_cat[classified_infections$week_year == "26_2017"] <- "> 50 mosquitoes"
+
+#additionally, over the holidays we were missing 2 weeks of mozzie collections, but the previous two weeks had a small handfull of mosquitoes
+classified_infections$mosquito_prev_2weeks_cat[classified_infections$week_year == "51_2017"] <- "0 - 50 mosquitoes"
+classified_infections$mosquito_prev_2weeks_cat[classified_infections$week_year == "52_2017"] <- "0 - 50 mosquitoes"
+
+
+
+saveRDS(classified_infections, "epitopes/MozzieAminoAcidAnalysis/Human demographic data/classified_infections.RDS")
+
+```
+
+
+
+# Overall risk of reinfection
+```{r}
+fit_surv <- survfit(Surv(Days,EventCensored)~1,data=classified_infections)
+
+fit_surv
+
+summary(fit_surv, times = 365.25)
+
+fit_surv_strat <-survfit(Surv(Days,EventCensored)~symptomatic_status,data=classified_infections)
+
+fit_surv_strat
+
+summary(fit_surv_strat, times = 365.25)
+
+```
+
+# Survival curve
+```{r}
+figFA <- ggsurvplot_combine(list(fit_surv_strat, fit_surv),
+                data = classified_infections,
+                risk.table = TRUE,
+                xlab=("Time in days"),
+                ylab=("Probability of survival without reinfection"),
+                font.main = c(12),
+                font.x = c(10),
+                font.y = c(10),
+                font.tickslab = c(8),
+                fontsize = 4,
+                risk.table.fontsize = 4,
+                palette = c("#00BFC4", "#F8766D", "black"),
+                tables.theme = theme_cleantable(),
+                tables.height = 0.25,
+                tables.col = "strata",
+                legend = "none",
+                legend.title = "Index infection",
+                legend.labs = c("Asx", "Sx", "All"),
+                conf.int = TRUE,title="Time to reinfection",xlim=c(-10,400))
+figFA
+```
+
+
+# Cox mixed-effects model
+```{r}
+cox_fig<-coxme(Surv(Days,EventCensored)~ageCat+gender+symptomatic_status+mosquito_prev_2weeks_cat+(1|unq_memID),data=classified_infections)
+
+cox_fig
+
+coeff1<-fixef(cox_fig)
+
+coxmetable_fig<-as.data.frame(exp(confint(cox_fig)))
+
+coxmetable_fig<-cbind(coxmetable_fig,exp(coeff1))
+#Change labels for plot
+coxmetable_fig$label<-row.names(coxmetable_fig)
+coxmetable_fig$label[1]="Age 5-15"
+coxmetable_fig$label[2]="Age >15"
+coxmetable_fig$label[3]="Male"
+coxmetable_fig$label[4]="Symptomatic"
+coxmetable_fig$label[5]="Mosquitoes 75-100"
+#Table
+coxmetable_fig
+#Plot
+figFB <- ggplot(coxmetable_fig,aes(y=label,x=exp(coeff1),xmin=`2.5 %`, xmax=`97.5 %`))+
+  geom_pointrange(size=1,shape=18)+
+  geom_vline(xintercept=1, lty=2)+
+  theme_bw()+
+  ylab("")+
+  xlab("Adj. HR (95%)")
+figFB
+
+```
+
+
+# Combine figures
+```{r}
+figF <- ggarrange(
+  ggarrange(figFA$plot,
+            figFA$table +
+              theme(
+                plot.title = element_text(size = 12)),
+            heights = c(1,0.3),
+            ncol = 1,
+            align = "v"),
+  figFB,
+  nrow = 1,
+  labels = c("A", "B"),
+  hjust = 0,
+  vjust = 1,
+  widths = c(1.5,1))
+
+figF
+
+
+ggsave(plot = figF, "epitopes/MozzieAminoAcidAnalysis/cfm_figures/figF_mod.png", width = 6, height = 4)
+
+
+```
+
+
+# Exploring case classification
+```{r, fig.height= 24, fig.width=6}
+all_infections <- HumanData %>%
+  select(unq_memID,pf_pcr_infection_status,sample_id_date,sample_name_dbs,age_y_baseline,gender,pfr364Q_std_combined, main_exposure_primary_case_def, main_outcome_primary_case_def)%>%
+  mutate(symptomatic_status = ifelse(is.na(main_exposure_primary_case_def), as.character(main_outcome_primary_case_def),as.character(main_exposure_primary_case_def))) %>%
+  arrange(unq_memID, sample_id_date) %>% 
+  group_by(unq_memID) %>% 
+  #add columns for previous and next infections so that we can filter out anything within 14 days of a symptomatic infection
+  mutate(pcr_next = lead(pf_pcr_infection_status,1),
+         pcr_prev = lag(pf_pcr_infection_status,1),
+         Sx_next = lead(symptomatic_status,1),
+         Sx_prev = lag(symptomatic_status,1),
+         days_since_prev = ymd(sample_id_date) - ymd(lag(sample_id_date,1))) %>%
+  #remove positive samples within 14 days of a symptomatic infection (there are 25 of them)
+  filter(Sx_prev != "symptomatic infection"| is.na(Sx_prev) | days_since_prev > days(14) | pf_pcr_infection_status != "positive") %>%
+  #do it again to see if there are any other positive samples within 14 days of a symptomatic infection
+  mutate(pcr_next = lead(pf_pcr_infection_status,1),
+         pcr_prev = lag(pf_pcr_infection_status,1),
+         Sx_next = lead(symptomatic_status,1),
+         Sx_prev = lag(symptomatic_status,1),
+         days_since_prev = ymd(sample_id_date) - ymd(lag(sample_id_date,1))) %>% #no more samples needed to be removed
+  select(-days_since_prev) %>%
+  #define whether samples are the the start middle or end of an infection
+  mutate(StartMiddleEnd=case_when(pf_pcr_infection_status=="negative" ~ "negative",
+                                  symptomatic_status == "symptomatic infection" & (pcr_prev == "negative" | is.na(pcr_prev) ) ~ "start+end",
+                                  symptomatic_status == "symptomatic infection" & pcr_prev == "positive" & Sx_prev == "symptomatic infection" ~ "start+end",
+                                  symptomatic_status == "symptomatic infection" & pcr_prev == "positive" & (Sx_prev == "asymptomatic infection" | is.na(Sx_prev)) ~ "end",
+                                  (symptomatic_status == "asymptomatic infection" | is.na(symptomatic_status)) & (pcr_prev == "negative" | is.na(pcr_prev)) & (pcr_next == "negative" | is.na(pcr_next)) ~ "start+end",
+                                  (symptomatic_status == "asymptomatic infection" | is.na(symptomatic_status)) & (pcr_prev == "negative" | is.na(pcr_prev)) & pcr_next == "positive" ~ "start",
+                                  (symptomatic_status == "asymptomatic infection" | is.na(symptomatic_status)) & pcr_prev == "positive" & Sx_prev == "symptomatic infection" & (pcr_next == "negative" | is.na(pcr_next)) ~ "start+end",
+                                  (symptomatic_status == "asymptomatic infection" | is.na(symptomatic_status)) & pcr_prev == "positive" & Sx_prev == "symptomatic infection" & pcr_next == "positive" ~ "start",
+                                  (symptomatic_status == "asymptomatic infection" | is.na(symptomatic_status)) & pcr_prev == "positive" & (Sx_prev == "asymptomatic infection" | is.na(Sx_prev)) & (pcr_next == "negative" | is.na(pcr_next)) ~ "end",
+                                  (symptomatic_status == "asymptomatic infection" | is.na(symptomatic_status)) & pcr_prev == "positive" & (Sx_prev == "asymptomatic infection" | is.na(Sx_prev)) & pcr_next == "positive" ~ "middle"))
+
+table(all_infections$symptomatic_status[all_infections$pf_pcr_infection_status == "positive"], all_infections$StartMiddleEnd[all_infections$pf_pcr_infection_status == "positive"], useNA = "ifany")
+
+
+ggplot(all_infections, aes(x = ymd(sample_id_date), y = unq_memID))+
+  geom_count(aes(color = StartMiddleEnd, fill = factor(symptomatic_status, levels = c("symptomatic infection", "asymptomatic infection", "no infection", NA))), shape = 21, size = 2) +
+  scale_fill_manual(values = c("#F8766D", "#00BFC4", adjustcolor("white", alpha.f = 0)), name = "symptomatic_status") +
+  scale_color_manual(values = c("black", "white", "grey", "white", "black"))+
+  theme_bw()
+
+```
+
+
+
+rmarkdown::render("C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/Once Bitten/epitopes/MozzieAminoAcidAnalysis/Overall_reinfection.Rmd", output_file=paste0('Overall_reinfection','_', Sys.Date(),'.html'),  encoding = 'UTF-8', knit_root_dir = "C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/Once Bitten/epitopes/MozzieAminoAcidAnalysis")
+

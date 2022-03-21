@@ -1,0 +1,224 @@
+---
+title: "Epitope paper figures"
+author: "Christine Markwalter"
+date: "3/16/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(ggpubr)
+library(survival)
+library(survminer)
+library(ggfortify)
+```
+
+# Figure data
+csp cd4+
+```{r}
+
+CD4_hazard <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/CD4_hazardplot.RDS")
+
+CD4_homolsurv <-  readRDS("epitopes/MozzieAminoAcidAnalysis/figures/CD4_homol_fig_cutoff60.RDS")
+
+CD4_homolcoxme <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/CD4_coxme_fig.RDS")
+
+CD4_randomdist <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/CD4_perm_data_time_dist.RDS")
+
+CD4_homolvrandom <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/CD4_homolvrandom_survival.RDS")
+
+cd4_randomsurv <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/CD4_random_strat_survival.RDS")
+
+cd4_logrank <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/CD4_random_logrank_chisq_fig.RDS")
+
+cd4_randomcoxme <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/CD4_random_coxme_fig.RDS")
+
+cd4_cutoff60 <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/CD4_freq_compare_cutoff60.RDS")
+
+```
+
+csp cd8+
+```{r}
+
+CD8_hazard <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/CD8_hazardplot.RDS")
+
+CD8_homolsurv <-  readRDS("epitopes/MozzieAminoAcidAnalysis/figures/CD8_homol_fig_cutoff60.RDS")
+
+CD8_homolcoxme <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/CD8_coxme_fig.RDS")
+
+CD8_randomdist <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/CD8_perm_data_time_dist.RDS")
+
+CD8_homolvrandom <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/CD8_homolvrandom_survival.RDS")
+
+CD8_randomsurv <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/CD8_random_strat_survival.RDS")
+
+CD8_logrank <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/CD8_random_logrank_chisq_fig.RDS")
+
+CD8_randomcoxme <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/CD8_random_coxme_fig.RDS")
+
+CD8_cutoff60 <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/CD8_freq_compare_cutoff60.RDS")
+
+```
+
+
+combined
+```{r}
+
+Combined_hazard <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/Combined_hazardplot.RDS")
+
+Combined_homolsurv <-  readRDS("epitopes/MozzieAminoAcidAnalysis/figures/Combined_homol_fig_cutoff60.RDS")
+
+Combined_homolcoxme <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/Combined_coxme_fig.RDS")
+
+Combined_randomdist <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/Combined_perm_data_time_dist.RDS")
+
+Combined_homolvrandom <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/Combined_homolvrandom_survival.RDS")
+
+Combined_randomsurv <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/Combined_random_strat_survival.RDS")
+
+Combined_logrank <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/Combined_random_logrank_chisq_fig.RDS")
+
+Combined_randomcoxme <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/Combined_random_coxme_fig.RDS")
+
+Combined_cutoff60 <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/Combined_freq_compare_cutoff60.RDS")
+
+```
+
+
+ama-1
+```{r}
+
+AMA_hazard <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/AMA_hazardplot.RDS")
+
+AMA_homolsurv <-  readRDS("epitopes/MozzieAminoAcidAnalysis/figures/AMA_homol_fig_cutoff60.RDS")
+
+AMA_homolcoxme <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/AMA_coxme_fig.RDS")
+
+AMA_randomdist <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/AMA_perm_data_time_dist.RDS")
+
+AMA_homolvrandom <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/AMA_homolvrandom_survival.RDS")
+
+AMA_randomsurv <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/AMA_random_strat_survival.RDS")
+
+AMA_logrank <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/AMA_random_logrank_chisq_fig.RDS")
+
+AMA_randomcoxme <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/AMA_random_coxme_fig.RDS")
+
+AMA_cutoff60 <- readRDS("epitopes/MozzieAminoAcidAnalysis/figures/AMA_freq_compare_cutoff60.RDS")
+
+```
+
+
+# Reinfection with homologous epitopes (vs random)
+```{r}
+
+homol_v_random <- ggarrange(CD4_homolvrandom +
+                              labs(title = "CSP CD4+", x = "") +
+                              theme(plot.title = element_text(hjust = 0.5)),
+                            CD8_homolvrandom +
+                              labs(title = "CSP CD8+") +
+                              theme(plot.title = element_text(hjust = 0.5), axis.text.y = element_blank(), axis.ticks.y = element_blank(), axis.title.y = element_blank()),
+                            AMA_homolvrandom +
+                              labs(title = "AMA-1", x = "") +
+                              theme(plot.title = element_text(hjust = 0.5), axis.text.y = element_blank(), axis.ticks.y = element_blank(), axis.title.y = element_blank()),
+                            common.legend = TRUE,
+                            legend = "bottom",
+                            widths = c(1.15,1,1),
+                            nrow = 1)
+
+homol_v_random
+
+ggsave(plot = homol_v_random, "epitopes/MozzieAminoAcidAnalysis/figures/homolvrandom.png", width = 10, height = 4)
+
+```
+
+# Homologous reinfection
+```{r}
+
+homol_strat <- ggarrange(ggarrange(CD4_homolsurv$plot +
+            geom_vline(xintercept = 60, linetype = "dotted") +
+            labs(title = "CSP CD4+", x = "") +
+            scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
+            theme_bw() +
+            theme(plot.title = element_text(hjust = 0.5), legend.position = "none"),
+            NULL,
+          CD4_homolsurv$table +
+            theme(plot.title = element_text(size = 12)),
+          heights = c(1,-0.02,0.2),
+          ncol = 1),
+          ggarrange(CD8_homolsurv$plot +
+            geom_vline(xintercept = 60, linetype = "dotted") +
+            labs(title = "CSP CD8+") +
+            scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
+            theme_bw() +
+            theme(plot.title = element_text(hjust = 0.5), legend.position = "none", axis.title.y = element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank()),
+            NULL,
+          CD8_homolsurv$table +
+            labs(title = "") +
+            theme(plot.title = element_text(size = 12), axis.text.y = element_blank()),
+          heights = c(1,-0.02,0.2),
+          ncol = 1),
+          ggarrange(AMA_homolsurv$plot +
+            geom_vline(xintercept = 60, linetype = "dotted") +
+            labs(title = "AMA-1", x = "") +
+            scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
+            theme_bw() +
+            theme(plot.title = element_text(hjust = 0.5), legend.position = "none", axis.title.y = element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank()),
+            NULL,
+          AMA_homolsurv$table +
+            labs(title = "") +
+            theme(plot.title = element_text(size = 12), axis.text.y = element_blank()),
+          heights = c(1,-0.02,0.2),
+          ncol = 1),
+          nrow = 1,
+          widths = c(1.15,1,1))
+
+
+homol_strat
+
+ggsave(plot = homol_strat, "epitopes/MozzieAminoAcidAnalysis/figures/homol_strat.png", width = 10, height = 6)
+
+#need to reformat data a bit for the forest plots, because the exp(coeff1) variable reads in like a function
+CD4_homolcoxme$data <- CD4_homolcoxme$data %>%
+  rename("aHR" = "exp(coeff1)")
+CD4_homolcoxme$mapping <- aes(x = aHR, y = label, xmin = `2.5 %`, xmax = `97.5 %`)
+CD8_homolcoxme$data <- CD8_homolcoxme$data %>%
+  rename("aHR" = "exp(coeff1)")
+CD8_homolcoxme$mapping <- aes(x = aHR, y = label, xmin = `2.5 %`, xmax = `97.5 %`)
+AMA_homolcoxme$data <- AMA_homolcoxme$data %>%
+  rename("aHR" = "exp(coeff1)")
+AMA_homolcoxme$mapping <- aes(x = aHR, y = label, xmin = `2.5 %`, xmax = `97.5 %`)
+
+homol_forestplots <- ggarrange(CD4_homolcoxme +
+            labs(x=""),
+          NULL,
+          CD8_homolcoxme +
+            theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()),
+          NULL,
+          AMA_homolcoxme +
+            labs(x="") +
+            theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()),
+          nrow = 1,
+          widths = c(1.3, -0.022, 1, -0.022, 1))
+
+homol_forestplots
+
+homol_asxsx_fig <- ggarrange(ggarrange(NULL,
+                    homol_strat,
+                    nrow = 1,
+                    widths = c(0.06,1)),
+                    NULL,
+          homol_forestplots,
+          heights = c(3,0.2,1),
+          labels = c("A", "", "B"),
+          ncol = 1)
+
+
+ggsave(plot = homol_asxsx_fig, "epitopes/MozzieAminoAcidAnalysis/figures/homol_asxsx.png", width = 12, height = 6)
+
+
+
+```
+
+
