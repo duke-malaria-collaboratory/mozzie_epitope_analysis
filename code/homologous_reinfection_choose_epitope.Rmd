@@ -9,7 +9,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(dpi=300)
-#knitr::opts_knit$set(root.dir = "~/UNC OneDrive/OneDrive - University of North Carolina at Chapel Hill/UNC Dissertation/Duke Malaria Work/Mozzie Survival")
+
 grDevices::pdf.options(useDingbats = FALSE)
 
 #if (!require("BiocManager", quietly = TRUE))
@@ -42,10 +42,10 @@ library(ggpubr)
 # Human data
 ```{r, warning=F,message=F}
 
-HumanData<-read.csv("epitopes/MozzieAminoAcidAnalysis/Human Demographic Data/spat21_human_final_censored_data_for_dissertation_with_exposure_outcome_1MAR2020.csv") %>%
+HumanData<-read.csv("data/original/spat21_human_final_censored_data_for_dissertation_with_exposure_outcome_1MAR2020.csv") %>%
   mutate(week_year = paste0(week(sample_id_date), "_", year(sample_id_date)))
 
-season <- readRDS("epitopes/MozzieAminoAcidAnalysis/Mosquito demographic data/spat21_mosquito_anopheles_merged_data_18JAN2019.RDS") %>%
+season <- readRDS("data/original/spat21_mosquito_anopheles_merged_data_18JAN2019.RDS") %>%
   mutate(collection_year = year(collection_date)) %>%
   arrange(collection_date) %>%
   group_by(collection_year, collection_week) %>%
@@ -86,12 +86,12 @@ head(HDS)
 
 
 # CHOOSE EPITOPE
-Define current epitope CSP/AMA and AA positions of interest (as determined from the RF models):
+Define current epitope CSP/AMA and AA positions of interest (as determined from the RF models). Need to to this before knitting!
 ```{r,echo=T}
-# #CSP CD4 T-cell
-# CurrentEpitopeName<-("CD4")
-# EpitopeCurrent<-c("x25","x28","x29","x31")
-# AMA <- FALSE
+#CSP CD4 T-cell
+CurrentEpitopeName<-("CD4")
+EpitopeCurrent<-c("x25","x28","x29","x31")
+AMA <- FALSE
 
 
 #CSP CD8 T-cell
@@ -104,10 +104,10 @@ Define current epitope CSP/AMA and AA positions of interest (as determined from 
 # EpitopeCurrent<-c("x25","x28","x29","x31","x59","x64","x66","x68")
 # AMA <- FALSE
 # 
-# #AMA
-CurrentEpitopeName<-("AMA")
-EpitopeCurrent<-c("x36","x44","x77","x90")
-AMA <- TRUE
+# # #AMA
+# CurrentEpitopeName<-("AMA")
+# EpitopeCurrent<-c("x36","x44","x77","x90")
+# AMA <- TRUE
 
 
 ```
@@ -117,10 +117,10 @@ AMA <- TRUE
 CSP
 ```{r, warning=F,message=F}
 
-seqs <- Biostrings::readDNAStringSet("epitopes/MozzieAminoAcidAnalysis/spat21_CSP_uniqueSeqs_final_censored.fasta")
+seqs <- Biostrings::readDNAStringSet("data/original/spat21_CSP_uniqueSeqs_final_censored.fasta")
 
 
-haplotypes<-read.csv("epitopes/MozzieAminoAcidAnalysis/Haplotype Data for Haplotype Prevalence/Summarized data/spat21_csp_summarized_haplotype_list_31DEC2019.csv")
+haplotypes<-read.csv("data/original/spat21_csp_summarized_haplotype_list_31DEC2019.csv")
 
 head(seqs)
 head(haplotypes)
@@ -128,9 +128,9 @@ head(haplotypes)
 
 AMA
 ```{r, eval = AMA, warning=F,message=F}
-seqs <- Biostrings::readDNAStringSet("epitopes/MozzieAminoAcidAnalysis/spat21_AMA_uniqueSeqs_final_censored.fasta")
+seqs <- Biostrings::readDNAStringSet("data/original/spat21_AMA_uniqueSeqs_final_censored.fasta")
 
-haplotypes<-read.csv("epitopes/MozzieAminoAcidAnalysis/Haplotype Data for Haplotype Prevalence/Summarized data/spat21_ama_summarized_haplotype_list_31DEC2019.csv")
+haplotypes<-read.csv("data/original/spat21_ama_summarized_haplotype_list_31DEC2019.csv")
 
 head(seqs)
 head(haplotypes)
@@ -411,7 +411,7 @@ homol_fig <- ggsurvplot(homol_fit_surv,risk.table = TRUE,
 
 homol_fig
 
-saveRDS(homol_fig, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_homol_nocutoff.RDS"))
+saveRDS(homol_fig, paste0("figures/robj/", CurrentEpitopeName,"_homol_nocutoff.RDS"))
 
 #These curves clearly cross, breaking the proportional hazards assumption. Further evidence:
 
@@ -429,7 +429,7 @@ ties <- TimeToDataAdvEpitope %>%
 #plotting the log hazard ratios
 hazard_plot <- plot(survfit(Surv(Days,EventCensored) ~ symptomatic_bin, data=TimeToDataAdvEpitope), col=c("black", "red"), fun="cloglog", xlab="Log(Days)", ylab="Log Hazard")
 
-saveRDS(hazard_plot, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_hazardplot.RDS"))
+saveRDS(hazard_plot, paste0("figures/robj/", CurrentEpitopeName,"_hazardplot.RDS"))
 
 #We want to do the analyses only after 60 days due to sampling bias and ph assumption
 
@@ -464,7 +464,7 @@ homol_fig_2 <- ggsurvplot(homol_fit_surv_2,risk.table = TRUE,
 
 homol_fig_2
 
-saveRDS(homol_fig_2, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_homol_fig_cutoff60.RDS"))
+saveRDS(homol_fig_2, paste0("figures/robj/", CurrentEpitopeName,"_homol_fig_cutoff60.RDS"))
 
 #calculating and plotting HRs
 
@@ -480,7 +480,6 @@ mutate(FrequencyCat=factor(FrequencyCat,levels=c("bottom","top")))
 model <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + ageCat + freq+mosquito_prev_2weeks_cat+(1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron")
 
 summary(model)
-#HR: 0.64 (0.4525028 0.8915091) ***cfm sees .63 (0.4508199 0.887919) This is stochastic because of the random effects added. Will set seed at the top and get final numbers later.
 exp(confint(model,method="Wald"))
 
 
@@ -495,7 +494,7 @@ coxmetable1$label[4]="Age >15"
 coxmetable1$label[5]="Type prevalence"
 coxmetable1$label[6]="Mosquitoes > 50"
 coxmetable1
-coxplot1=ggplot(coxmetable1,aes(y=label,x=exp(coeff1),xmin=`2.5 %`, xmax=`97.5 %`))+
+coxplot1=ggplot(coxmetable1 %>% rename("aHR" = "exp(coeff1)"),aes(y=label,x=aHR,xmin=`2.5 %`, xmax=`97.5 %`))+
   geom_pointrange(size=1,shape=18)+
   geom_vline(xintercept=1, lty=2)+
   theme_bw()+
@@ -504,7 +503,7 @@ coxplot1=ggplot(coxmetable1,aes(y=label,x=exp(coeff1),xmin=`2.5 %`, xmax=`97.5 %
   scale_x_continuous(trans="log", breaks=c(0.5, 1, 2))
 coxplot1
 
-saveRDS(coxplot1, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_coxme_fig.RDS"))
+saveRDS(coxplot1, paste0("figures/robj/", CurrentEpitopeName,"_coxme_fig.RDS"))
 
 ```
 
@@ -535,14 +534,13 @@ freq_compare <- epitope_props %>%
 
 freq_compare
 
-saveRDS(freq_compare, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_freq_compare_cutoff60.RDS"))
+saveRDS(freq_compare, paste0("figures/robj/", CurrentEpitopeName,"_freq_compare_cutoff60.RDS"))
 
 
 epitope_props %>%
   arrange(AAs) %>%
   ungroup() %>%
-  summarise(wilcoxp = wilcox.test(prop_AAs[cutoff_60 == 1], prop_AAs[cutoff_60 == 0], paired = TRUE)$p.value) #p = 0.556, no sig difference
-
+  summarise(wilcoxp = wilcox.test(prop_AAs[cutoff_60 == 1], prop_AAs[cutoff_60 == 0], paired = TRUE)$p.value) 
 
 
 ```
@@ -575,12 +573,73 @@ indiv_times_fig <- TimeToDataAdvEpitope_60 %>%
 
 indiv_times_fig
 
-saveRDS(indiv_times_fig, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_individual_strat_homol_time.RDS"))
+saveRDS(indiv_times_fig, paste0("figures/robj/", CurrentEpitopeName,"_individual_strat_homol_time.RDS"))
 
 
 
 ```
 
+## Epitope type prevalence analysis
+We want to know how whether there is an effect-measure modification of epitope type prevalence(common, middling, rare) on the effect of symptomaticity on time to reinfection.
+
+First, we'll make a figure with the 1-yr risk of homologous reinfection for each epitope type overlayed with the number of infections with that type.
+```{r, eval = !AMA}
+
+AA1ySummary <- summary(survfit(Surv(Days,EventCensored)~AAs + symptomatic_status,data=TimeToDataAdvEpitope_60),times=365.25,extend=TRUE)
+
+
+AA1ySummary_df <- as_tibble(as.data.frame(AA1ySummary$table) %>% rownames_to_column()) %>%
+  separate(rowname, into = c("AAs", "symptomatic_status"), sep = ", ") %>%
+  mutate(AAs = str_trim(gsub(".*=", "", AAs)), symptomatic_status = str_trim(gsub(".*=", "", symptomatic_status))) %>%
+  bind_cols(surv = AA1ySummary$surv, survse = AA1ySummary$std.err)
+
+
+type_prevalence_risk_fig <- AA1ySummary_df %>%
+    arrange(desc(records)) %>%
+    mutate(AAs=fct_inorder(AAs), symptomatic_status = factor(symptomatic_status, levels = c("symptomatic infection", "asymptomatic infection"), labels = c("Sx", "Asx")))%>%
+    mutate(risk = 1-surv, lower = risk - 1.96*survse, upper = risk + 1.96*survse) %>%
+    ggplot(aes(x = AAs)) +
+    geom_pointrange(aes(y = risk, ymin = risk-survse, ymax = risk+survse, fill = symptomatic_status), position=position_dodge(width=0.3)) +
+    geom_bar(aes(y = records/300), alpha = 0.2, stat = "identity") +
+    scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1),sec.axis = sec_axis(~.*300, name = "Number of infections",breaks=c(50,100,150,200,250,300,350))) +
+    geom_point(aes(y=risk,fill=symptomatic_status),shape=21,position=position_dodge(width=0.3), size=3)+
+    labs(color = "Symptomaticity", fill = "Symptomaticity", y = "1-year risk of homologous reinfection", x = paste0(CurrentEpitopeName, " epitope type")) +
+    theme_classic2() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), legend.position = "top")
+
+```
+
+Now we will break the epitope types up into three categories based on prevalence: common, middling, and rare. We will divide them such that there are approx equal number of infections in each category.
+```{r, eval = !AMA}
+
+quant_cut <- function(x, n) {
+    qs <- quantile(x, (1:(n-1))/n) #sets the quantile breaks of interest
+    brks <- c(-Inf, qs, Inf)
+    cut(x, breaks=brks, labels=FALSE,right=T)
+}
+
+
+#Defining a variable quant that divides the epitope types into three groups based on the number of infections 
+TimeToDataAdvEpitope_60$quant <- quant_cut(TimeToDataAdvEpitope_60$freq, 3)
+#Common = 3, Middling = 2, Rare = 1
+
+#Quick checks that the divisions make sense
+summary(as.factor(TimeToDataAdvEpitope_60$quant))
+
+TimeToDataAdvEpitope_60 %>%
+  ggplot(aes(x = quant, fill = AAs)) +
+  geom_bar() +
+  theme_bw()
+
+```
+
+ERICA START HERE!
+Now we'll look to see if there is effect measure modification...
+```{r, eval = !AMA}
+#will only run for CSP epitopes
+
+
+```
 
 
 
@@ -667,7 +726,7 @@ perm_plot <- ggplot(perm_data %>% bind_rows() %>% filter(EventCensored == 1, cut
 
 perm_plot
 
-saveRDS(perm_plot, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_perm_data_time_dist.RDS"))
+saveRDS(perm_plot, paste0("figures/robj/", CurrentEpitopeName,"_perm_data_time_dist.RDS"))
 
 ```
 
@@ -720,7 +779,7 @@ homol_random_fig <- surv_data_forfig %>%
 
 homol_random_fig
 
-saveRDS(homol_random_fig, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_homolvrandom_survival.RDS"))
+saveRDS(homol_random_fig, paste0("figures/robj/", CurrentEpitopeName,"_homolvrandom_survival.RDS"))
 
 
 ```
@@ -756,7 +815,7 @@ random_logrank_figure <- tibble(chisq = unlist(perm_survdiff_t$chisq)) %>%
 
 random_logrank_figure
 
-saveRDS(random_logrank_figure, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_random_logrank_chisq_fig.RDS"))
+saveRDS(random_logrank_figure, paste0("figures/robj/", CurrentEpitopeName,"_random_logrank_chisq_fig.RDS"))
 
 nrow(tibble(chisq = unlist(perm_survdiff_t$chisq)) %>%
        filter(chisq < 0.001 | chisq > 5.024))
@@ -798,7 +857,7 @@ random_strata_fig <- random_SxAsx_addforplot %>%
 
 random_strata_fig
 
-saveRDS(random_strata_fig, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_random_strat_survival.RDS"))
+saveRDS(random_strata_fig, paste0("figures/robj/", CurrentEpitopeName,"_random_strat_survival.RDS"))
 
 ```
 
@@ -852,7 +911,9 @@ random_aHR_fig <- random_coxme_coeff %>%
   ggstance::geom_pointrangeh(aes(x = med, xmin = lower, xmax = upper, y = variable)) +
   theme_bw()
 
-saveRDS(random_aHR_fig, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", CurrentEpitopeName,"_random_coxme_fig.RDS"))
+random_aHR_fig
+
+saveRDS(random_aHR_fig, paste0("figures/robj/", CurrentEpitopeName,"_random_coxme_fig.RDS"))
 
 
 
@@ -860,3 +921,5 @@ saveRDS(random_aHR_fig, paste0("epitopes/MozzieAminoAcidAnalysis/figures/", Curr
 
 
 rmarkdown::render("C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/Once Bitten/epitopes/MozzieAminoAcidAnalysis/homologous_reinfection_choose_epitope.Rmd", output_file= paste0(CurrentEpitopeName, "_homologous_reinfection_", format(now(), "%Y%m%d_%H%M%S_"), ".html"), encoding = 'UTF-8', knit_root_dir = "C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/Once Bitten/")
+
+rmarkdown::render("C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/Once Bitten/mozzie_epitope_analysis/code/homologous_reinfection_choose_epitope.Rmd", output_file= paste0(CurrentEpitopeName, "_homologous_reinfection_", format(now(), "%Y%m%d_%H%M%S_"), ".html"), encoding = 'UTF-8', knit_root_dir = "C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/Once Bitten/mozzie_epitope_analysis")

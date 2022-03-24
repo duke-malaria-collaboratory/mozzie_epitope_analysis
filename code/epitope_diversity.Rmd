@@ -8,7 +8,6 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(dpi=300)
-knitr::opts_knit$set(root.dir = "C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/Once Bitten")
 grDevices::pdf.options(useDingbats = FALSE)
 library(Biostrings)
 #library(ggplot2) #redundant
@@ -32,7 +31,7 @@ library(ggpubr)
 
 #Human data
 ```{r}
-HumanData<-read.csv("epitopes/MozzieAminoAcidAnalysis/Human demographic data/spat21_human_final_censored_data_for_dissertation_with_exposure_outcome_1MAR2020.csv")
+HumanData<-read.csv("data/original/spat21_human_final_censored_data_for_dissertation_with_exposure_outcome_1MAR2020.csv")
 
 HDS<-HumanData %>% 
   dplyr::select(sample_name_dbs,unq_memID,sample_id_date,main_outcome_primary_case_def,main_exposure_primary_case_def)%>%
@@ -47,10 +46,10 @@ HDS<-HumanData %>%
 ## Load sequence data
 ```{r, warning=F,message=F}
 
-csp_seqs <- Biostrings::readDNAStringSet("epitopes/MozzieAminoAcidAnalysis/spat21_CSP_uniqueSeqs_final_censored.fasta")
+csp_seqs <- Biostrings::readDNAStringSet("data/original/spat21_CSP_uniqueSeqs_final_censored.fasta")
 
 
-csp_haplotypes<-read.csv("epitopes/MozzieAminoAcidAnalysis/Haplotype Data for Haplotype Prevalence/Summarized data/spat21_csp_summarized_haplotype_list_31DEC2019.csv")
+csp_haplotypes<-read.csv("data/original/spat21_csp_summarized_haplotype_list_31DEC2019.csv")
 
 head(csp_seqs)
 head(csp_haplotypes)
@@ -188,7 +187,11 @@ cd4_sunburst_plot <- ggplot(combined, aes(x = as.factor(level), y = value, fill 
   theme_minimal() +
   theme(legend.position = "none")
 
-ggsave(plot = cd4_sunburst_plot, "epitopes/MozzieAminoAcidAnalysis/cfm_figures/cd4_sunburst.png", width = 6, height = 6)
+cd4_sunburst_plot
+
+saveRDS(cd4_sunburst_plot, "figures/robj/cd4_sunburst.RDS")
+
+ggsave(plot = cd4_sunburst_plot, "figures/cd4_sunburst.png", width = 6, height = 6)
 
 
 ```
@@ -239,7 +242,11 @@ cd8_sunburst_plot <- ggplot(combined, aes(x = as.factor(level), y = value, fill 
   theme_minimal() +
   theme(legend.position = "none")
 
-ggsave(plot = cd8_sunburst_plot, "epitopes/MozzieAminoAcidAnalysis/cfm_figures/cd8_sunburst.png", width = 6, height = 6)
+cd8_sunburst_plot
+
+saveRDS(cd8_sunburst_plot, "figures/robj/cd8_sunburst.RDS")
+
+ggsave(plot = cd8_sunburst_plot, "figures/cd8_sunburst.png", width = 6, height = 6)
 
 
 
@@ -250,10 +257,10 @@ ggsave(plot = cd8_sunburst_plot, "epitopes/MozzieAminoAcidAnalysis/cfm_figures/c
 ## Load sequence data
 ```{r, warning=F,message=F}
 
-ama_seqs <- Biostrings::readDNAStringSet("epitopes/MozzieAminoAcidAnalysis/spat21_AMA_uniqueSeqs_final_censored.fasta")
+ama_seqs <- Biostrings::readDNAStringSet("data/original/spat21_AMA_uniqueSeqs_final_censored.fasta")
 
 
-ama_haplotypes<-read.csv("epitopes/MozzieAminoAcidAnalysis/Haplotype Data for Haplotype Prevalence/Summarized data/spat21_ama_summarized_haplotype_list_31DEC2019.csv")
+ama_haplotypes<-read.csv("data/original/spat21_ama_summarized_haplotype_list_31DEC2019.csv")
 
 head(ama_seqs)
 head(ama_haplotypes)
@@ -388,7 +395,11 @@ ama_sunburst_plot <- ggplot(combined, aes(x = as.factor(level), y = value, fill 
   theme_minimal() +
   theme(legend.position = "none")
 
-ggsave(plot = ama_sunburst_plot, "epitopes/MozzieAminoAcidAnalysis/cfm_figures/ama_sunburst.png", width = 6, height = 6)
+ama_sunburst_plot
+
+saveRDS(ama_sunburst_plot, "figures/robj/ama_sunburst.RDS")
+
+ggsave(plot = cd4_sunburst_plot, "figures/ama_sunburst.png", width = 6, height = 6)
 
 
 ```
@@ -410,7 +421,7 @@ my.formula <- y ~ x+0
 
 
 cd4_moi_plot <- ggplot(csp_moi,aes(x=HType_moi, y=cd4_moi))+
-  geom_point(alpha=0.5)+
+  geom_point(alpha=0.5, position = "jitter")+
   coord_cartesian(xlim=c(0,18),ylim=c(0,18))+
   geom_smooth(method = lm,color="black")+
   labs(title=paste0("CD4+ epitope MOI corr."))+
@@ -422,7 +433,7 @@ cd4_moi_plot <- ggplot(csp_moi,aes(x=HType_moi, y=cd4_moi))+
   ylab("Epitope MOI")
 
 cd8_moi_plot <- ggplot(csp_moi,aes(x=HType_moi, y=cd8_moi))+
-  geom_point(alpha=0.5)+
+  geom_point(alpha=0.5, position = "jitter")+
   coord_cartesian(xlim=c(0,18),ylim=c(0,18))+
   geom_smooth(method = lm,color="black")+
   labs(title=paste0("CD8+ epitope MOI corr."))+
@@ -434,7 +445,7 @@ cd8_moi_plot <- ggplot(csp_moi,aes(x=HType_moi, y=cd8_moi))+
   ylab("Epitope MOI")
 
 ama_moi_plot <- ggplot(ama_moi,aes(x=HType_moi, y=ama_moi))+
-  geom_point(alpha=0.5)+
+  geom_point(alpha=0.5, position = "jitter")+
   coord_cartesian(xlim=c(0,18),ylim=c(0,18))+
   geom_smooth(method = lm,color="black")+
   labs(title=paste0("AMA-1 epitope MOI corr."))+
@@ -446,65 +457,75 @@ ama_moi_plot <- ggplot(ama_moi,aes(x=HType_moi, y=ama_moi))+
   ylab("Epitope MOI")
 
 
+
+cd4_moi_plot
+cd8_moi_plot
+ama_moi_plot
+
+saveRDS(cd4_moi_plot, "figures/robj/cd4_moi_plot.RDS")
+saveRDS(cd8_moi_plot, "figures/robj/cd8_moi_plot.RDS")
+saveRDS(ama_moi_plot, "figures/robj/ama_moi_plot.RDS")
+
+
 ```
 
 
 # Combining figures
 ```{r}
-combined_fig <- ggarrange(ggarrange(cd4_moi_plot +
-                      labs(x = NULL, y = NULL),
-            cd4_sunburst_plot,
-            nrow = 1),
-  ggarrange(cd8_moi_plot +
-              labs(x = NULL),
-            cd8_sunburst_plot,
-            nrow = 1),
-  ggarrange(ama_moi_plot +
-              labs(y = NULL),
-            ama_sunburst_plot,
-            nrow = 1),
-  ncol = 1)
-
-ggsave(plot = combined_fig, "epitopes/MozzieAminoAcidAnalysis/cfm_figures/moi_sunburst.png", width = 9, height = 12)
-
-
-alt_combined_fig <- ggarrange(ggarrange(cd4_sunburst_plot +
-                                          labs(title = "CD4+") +
-                                          theme(plot.title = element_text(hjust = 0.5), plot.margin = unit(c(-2,0,-5,0), "cm")),
-            cd8_sunburst_plot +
-                                          labs(title = "CD8+") +
-                                          theme(plot.title = element_text(hjust = 0.5), plot.margin = unit(c(-2,0,-5,0), "cm")),
-            ama_sunburst_plot +
-                                          labs(title = "AMA-1") +
-                                          theme(plot.title = element_text(hjust = 0.5), plot.margin = unit(c(-2,0,-5,0), "cm")),
-            nrow = 1,
-            widths = c(1,1,1)),
-          ggarrange(NULL,
-            cd4_moi_plot +
-              labs(x = NULL, title = NULL) +
-              theme(plot.margin = unit(c(-4,0,0,0), "cm")),
-            NULL,
-            cd8_moi_plot +
-              labs(y = NULL, title = NULL) +
-              theme(plot.margin = unit(c(-4,0,0,0), "cm")),
-            NULL,
-            ama_moi_plot +
-              labs(x = NULL, y = NULL, title = NULL)+
-              theme(plot.margin = unit(c(-4,0,0,0), "cm")),
-            NULL,
-            nrow = 1,
-            widths = c(0.1,1.1,0.4,1,0.4,1,0.2),
-            align = "h"),
-          nrow = 2,
-          heights = c(6,1),
-          align = "v")
-
-
-ggsave(plot = alt_combined_fig, "epitopes/MozzieAminoAcidAnalysis/cfm_figures/alt_moi_sunburst.png", width = 16, height = 12)
+# combined_fig <- ggarrange(ggarrange(cd4_moi_plot +
+#                       labs(x = NULL, y = NULL),
+#             cd4_sunburst_plot,
+#             nrow = 1),
+#   ggarrange(cd8_moi_plot +
+#               labs(x = NULL),
+#             cd8_sunburst_plot,
+#             nrow = 1),
+#   ggarrange(ama_moi_plot +
+#               labs(y = NULL),
+#             ama_sunburst_plot,
+#             nrow = 1),
+#   ncol = 1)
+# 
+# ggsave(plot = combined_fig, "epitopes/MozzieAminoAcidAnalysis/cfm_figures/moi_sunburst.png", width = 9, height = 12)
+# 
+# 
+# alt_combined_fig <- ggarrange(ggarrange(cd4_sunburst_plot +
+#                                           labs(title = "CD4+") +
+#                                           theme(plot.title = element_text(hjust = 0.5), plot.margin = unit(c(-2,0,-5,0), "cm")),
+#             cd8_sunburst_plot +
+#                                           labs(title = "CD8+") +
+#                                           theme(plot.title = element_text(hjust = 0.5), plot.margin = unit(c(-2,0,-5,0), "cm")),
+#             ama_sunburst_plot +
+#                                           labs(title = "AMA-1") +
+#                                           theme(plot.title = element_text(hjust = 0.5), plot.margin = unit(c(-2,0,-5,0), "cm")),
+#             nrow = 1,
+#             widths = c(1,1,1)),
+#           ggarrange(NULL,
+#             cd4_moi_plot +
+#               labs(x = NULL, title = NULL) +
+#               theme(plot.margin = unit(c(-4,0,0,0), "cm")),
+#             NULL,
+#             cd8_moi_plot +
+#               labs(y = NULL, title = NULL) +
+#               theme(plot.margin = unit(c(-4,0,0,0), "cm")),
+#             NULL,
+#             ama_moi_plot +
+#               labs(x = NULL, y = NULL, title = NULL)+
+#               theme(plot.margin = unit(c(-4,0,0,0), "cm")),
+#             NULL,
+#             nrow = 1,
+#             widths = c(0.1,1.1,0.4,1,0.4,1,0.2),
+#             align = "h"),
+#           nrow = 2,
+#           heights = c(6,1),
+#           align = "v")
+# 
+# 
+# ggsave(plot = alt_combined_fig, "epitopes/MozzieAminoAcidAnalysis/cfm_figures/alt_moi_sunburst.png", width = 16, height = 12)
 
 
 ```
 
 
-
+rmarkdown::render("C:/Users/cf199/Box/O\'Meara-Taylor Postdoc//mozzie_epitope_analysis/code/epitope_diversity.Rmd", output_file= paste0("epitope_diversity_", format(now(), "%Y%m%d_%H%M%S_"), ".html"), encoding = 'UTF-8', knit_root_dir = "C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/mozzie_epitope_analysis")
 
