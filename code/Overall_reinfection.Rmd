@@ -8,7 +8,6 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(dpi=300)
-knitr::opts_knit$set(root.dir = "C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/Once Bitten")
 grDevices::pdf.options(useDingbats = FALSE)
 library(Biostrings)
 #library(ggplot2) #redundant
@@ -32,9 +31,9 @@ library(ggpubr)
 
 # Read in data
 ```{r, warning=F,message=F}
-HumanData<-read.csv("epitopes/MozzieAminoAcidAnalysis/Human demographic data/spat21_human_final_censored_data_for_dissertation_with_exposure_outcome_1MAR2020.csv")
+HumanData<-read.csv("data/original/spat21_human_final_censored_data_for_dissertation_with_exposure_outcome_1MAR2020.csv")
 
-season <- readRDS("epitopes/MozzieAminoAcidAnalysis/Mosquito demographic data/spat21_mosquito_anopheles_merged_data_18JAN2019.RDS") %>%
+season <- readRDS("data/original/spat21_mosquito_anopheles_merged_data_18JAN2019.RDS") %>%
   mutate(collection_year = year(collection_date)) %>%
   group_by(collection_year, collection_week) %>%
   mutate(n_week = n()) %>%
@@ -161,7 +160,7 @@ classified_infections$mosquito_prev_2weeks_cat[classified_infections$week_year =
 
 
 
-saveRDS(classified_infections, "epitopes/MozzieAminoAcidAnalysis/Human demographic data/classified_infections.RDS")
+#saveRDS(classified_infections, "epitopes/MozzieAminoAcidAnalysis/Human demographic data/classified_infections.RDS")
 
 ```
 
@@ -310,6 +309,97 @@ ggplot(all_infections, aes(x = ymd(sample_id_date), y = unq_memID))+
   theme_bw()
 
 ```
+
+
+#Updated 2/23/2022 - Erica Zeno
+```{r}
+#Removing infections in the first 60 days
+classified_infections <- classified_infections %>% 
+  mutate(cutoff_60=ifelse(Days>60,1,0))
+
+classified_infections_60 <- classified_infections %>% filter(cutoff_60==1)
+
+fit_surv60 <- survfit(Surv(Days,EventCensored)~1,data=classified_infections_60)
+
+fit_surv60
+
+summary(fit_surv60, times = 365.25)
+
+fit_surv_strat60 <-survfit(Surv(Days,EventCensored)~symptomatic_status,data=classified_infections_60)
+
+fit_surv_strat60
+
+summary(fit_surv_strat60, times = 365.25)
+
+
+figFA_60 <- ggsurvplot_combine(list(fit_surv_strat60, fit_surv60),
+                data = classified_infections,
+                risk.table = TRUE,
+                xlab=("Time in days"),
+                ylab=("Probability of survival without reinfection"),
+                font.main = c(12),
+                font.x = c(10),
+                font.y = c(10),
+                font.tickslab = c(8),
+                fontsize = 4,
+                risk.table.fontsize = 4,
+                palette = c("#00BFC4", "#F8766D", "black"),
+                tables.theme = theme_cleantable(),
+                tables.height = 0.25,
+                tables.col = "strata",
+                legend = "none",
+                legend.title = "Index infection",
+                legend.labs = c("Asx", "Sx", "All"),
+                conf.int = TRUE,title="Time to reinfection",xlim=c(-10,400))
+figFA_60
+
+#cox model and plot of HRs
+cox_fig_60<-coxme(Surv(Days,EventCensored)~ageCat+gender+symptomatic_status+mosquito_prev_2weeks_cat+(1|unq_memID),data=classified_infections_60)
+
+cox_fig_60
+
+coeff1_60<-fixef(cox_fig_60)
+
+coxmetable_fig_60<-as.data.frame(exp(confint(cox_fig_60)))
+
+coxmetable_fig_60<-cbind(coxmetable_fig_60,exp(coeff1_60))
+#Change labels for plot
+coxmetable_fig_60$label<-row.names(coxmetable_fig_60)
+coxmetable_fig_60$label[1]="Age 5-15"
+coxmetable_fig_60$label[2]="Age >15"
+coxmetable_fig_60$label[3]="Male"
+coxmetable_fig_60$label[4]="Symptomatic"
+coxmetable_fig_60$label[5]="Mosquitoes 75-100"
+#Table
+coxmetable_fig_60
+#Plot
+figFB_60 <- ggplot(coxmetable_fig_60,aes(y=label,x=exp(coeff1_60),xmin=`2.5 %`, xmax=`97.5 %`))+
+  geom_pointrange(size=1,shape=18)+
+  geom_vline(xintercept=1, lty=2)+
+  theme_bw()+
+  ylab("")+
+  xlab("Adj. HR (95%)")
+figFB_60
+
+#combine 
+figF_60 <- ggarrange(
+  ggarrange(figFA_60$plot,
+            figFA_60$table +
+              theme(
+                plot.title = element_text(size = 12)),
+            heights = c(1,0.3),
+            ncol = 1,
+            align = "v"),
+  figFB_60,
+  nrow = 1,
+  labels = c("A", "B"),
+  hjust = 0,
+  vjust = 1,
+  widths = c(1.5,1))
+
+figF_60
+```
+
 
 
 
