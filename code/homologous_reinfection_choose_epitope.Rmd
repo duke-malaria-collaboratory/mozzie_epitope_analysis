@@ -639,6 +639,57 @@ Now we'll look to see if there is effect measure modification...
 #will only run for CSP epitopes
 
 
+#Checking quant variable. Crosstab with symptomatic status:
+symp_table <- xtabs(~symptomatic_status+quant, data=TimeToDataAdvEpitope_60)
+ftable(symp_table)
+summary(symp_table)
+
+#First fit crude model
+model_crude <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + (1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron")
+summary(model_crude)
+
+#Fit a crude with an interaction term 
+model_crude_int <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + symptomatic_bin*quant + (1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron")
+summary(model_crude_int)
+#p-value of interaction term: 0.038
+
+#Likelihood ratio test
+anova(model_crude, model_crude_int)
+#p-value: 2.2e-16 
+
+#Fit the full model 
+model <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + ageCat + freq+mosquito_prev_2weeks_cat+(1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron")
+
+#Fit a full model with an interaction term 
+model_full <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + ageCat + freq+mosquito_prev_2weeks_cat + symptomatic_bin*quant + (1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron")
+summary(model_full)
+#p-value of interaction term:4.0e-02
+
+#Likelihood ratio test
+anova(model, model_full)
+#p-value: 0.09559
+
+
+#Fit 3 stratified models for each prevalence category
+model_1 <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + ageCat + freq+mosquito_prev_2weeks_cat+(1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron", subset = quant==1)
+summary(model_1)
+exp(confint(model_1,method="Wald"))
+#HR: 0.35 (0.16, 0.77)
+
+model_2 <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + ageCat + freq+mosquito_prev_2weeks_cat+(1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron", subset = quant==2)
+summary(model_2)
+exp(confint(model_2,method="Wald"))
+#HR: 0.52 (0.28, 0.95)
+
+model_3 <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + ageCat + freq+mosquito_prev_2weeks_cat+(1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron", subset = quant==3)
+summary(model_3)
+exp(confint(model_3,method="Wald"))
+#HR:0.71 (0.44, 1.15)
+
+symp_table <- xtabs(~symptomatic_status+quant, data=TimeToDataAdvEpitope_60)
+ftable(symp_table)
+summary(symp_table)
+
 ```
 
 
