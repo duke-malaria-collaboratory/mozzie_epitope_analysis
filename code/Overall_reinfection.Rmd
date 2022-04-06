@@ -47,7 +47,7 @@ season <- readRDS("data/original/spat21_mosquito_anopheles_merged_data_18JAN2019
   select(week_year,mosquito_prev_2weeks_cat) %>%
   unique()
 
-
+getwd()
 ```
 
 
@@ -400,7 +400,91 @@ figF_60 <- ggarrange(
 figF_60
 ```
 
+# Checking the distribution of variables before and after 60 days - EZ March 2022 
+```{r, warning=F,message=F}
+popcheck_overall<-classified_infections
 
+#cutoff_60 is variable before and after? greater than 60 vs less than or equal to 60
+
+#time to censoring, mean, days
+popcheck_overall %>% 
+  group_by(cutoff_60) %>% 
+  summarize_at(vars(Days), list(name = mean))
+  
+mean(popcheck_overall$Days)
+
+t.test(popcheck_overall$Days, popcheck_overall$cutoff_60)
+
+
+#symptomatic status
+table(popcheck_overall$symptomatic_status,useNA = "always")
+popcheck_overall %>%
+  group_by(symptomatic_status) %>%
+  summarise(n=(n()))
+popcheck_overall %>%
+  group_by(symptomatic_status,cutoff_60) %>%
+  summarise(n=n())
+
+CrossTable(popcheck_overall$symptomatic_status, popcheck_overall$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS"))
+
+
+#Age
+table(popcheck_overall$ageCat,useNA = "always")
+popcheck_overall %>%
+  group_by(ageCat) %>%
+  summarise(n=(n()))
+popcheck_overall %>%
+  group_by(ageCat,cutoff_60) %>%
+  summarise(n=n())
+
+
+CrossTable(popcheck_overall$ageCat, popcheck_overall$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS"))
+
+
+#Sex
+table(popcheck_overall$gender,useNA = "always")
+popcheck_overall %>%
+  group_by(gender) %>%
+  summarise(n=(n()))
+popcheck_overall %>%
+  group_by(gender,cutoff_60) %>%
+  summarise(n=n())
+
+
+CrossTable(popcheck_overall$gender, popcheck_overall$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS"))
+
+#Transmission Season
+table(popcheck_overall$mosquito_prev_2weeks_cat,useNA = "always")
+popcheck_overall %>%
+  group_by(mosquito_prev_2weeks_cat) %>%
+  summarise(n=(n()))
+popcheck_overall %>%
+  group_by(mosquito_prev_2weeks_cat, cutoff_60) %>%
+  summarise(n=(n()))
+
+
+CrossTable(popcheck_overall$mosquito_prev_2weeks_cat, popcheck_overall$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS"))
+
+
+
+####trying to get percentages and do chi-square tests###
+install.packages("gmodels")
+library(gmodels)
+
+CrossTable(popcheck_overall$symptomatic_status, popcheck_overall$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS"))
+
+CrossTable(popcheck_overall$ageCat, popcheck_overall$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS"))
+
+CrossTable(popcheck_overall$gender, popcheck_overall$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS"))
+
+CrossTable(popcheck_overall$mosquito_prev_2weeks_cat, popcheck_overall$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS"))
+
+#one way to get frequencies and do tests of independence
+symp_table <- xtabs(~symptomatic_status+cutoff_60, data=popcheck_overall)
+ftable(symp_table)
+summary(symp_table)
+
+```
 
 
 rmarkdown::render("C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/Once Bitten/epitopes/MozzieAminoAcidAnalysis/Overall_reinfection.Rmd", output_file=paste0('Overall_reinfection','_', Sys.Date(),'.html'),  encoding = 'UTF-8', knit_root_dir = "C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/Once Bitten/epitopes/MozzieAminoAcidAnalysis")
