@@ -39,8 +39,45 @@ library(ggpubr)
 
 
 
+# CHOOSE EPITOPE
+Define current epitope CSP/AMA and AA positions of interest (as determined from the RF models). Need to to this before knitting!
+```{r,echo=T}
+#CSP CD4 T-cell (Th2R)
+# CurrentEpitopeName<-("CD4")
+# EpitopeCurrent<-c("x25","x28","x29","x31")
+# AMA <- FALSE
+
+
+#CSP CD8 T-cell (Th3R)
+# CurrentEpitopeName<-("CD8")
+# EpitopeCurrent<-c("x59","x64","x66","x68")
+# AMA <- FALSE
+
+# #CSP Combined T-cell
+# CurrentEpitopeName<-("Combined")
+# EpitopeCurrent<-c("x25","x28","x29","x31","x59","x64","x66","x68")
+# AMA <- FALSE
+
+# #AMA
+# CurrentEpitopeName<-("AMA")
+# EpitopeCurrent<-c("x36","x44","x77","x90")
+# AMA <- TRUE
+
+# #AMA c1L
+CurrentEpitopeName<-("c1L")
+EpitopeCurrent<-c("x44","x47","x48","x53")
+AMA <- TRUE
+
+```
+
+
+
+
 # Human data
 ```{r, warning=F,message=F}
+#color scheme
+strat_colors = c("#87B4C0", "#CE5B3B")
+
 
 HumanData<-read.csv("data/original/spat21_human_final_censored_data_for_dissertation_with_exposure_outcome_1MAR2020.csv") %>%
   mutate(week_year = paste0(week(sample_id_date), "_", year(sample_id_date)))
@@ -84,33 +121,6 @@ head(HDS)
 
 ```
 
-
-# CHOOSE EPITOPE
-Define current epitope CSP/AMA and AA positions of interest (as determined from the RF models). Need to to this before knitting!
-```{r,echo=T}
-#CSP CD4 T-cell
-CurrentEpitopeName<-("CD4")
-EpitopeCurrent<-c("x25","x28","x29","x31")
-AMA <- FALSE
-
-
-#CSP CD8 T-cell
-# CurrentEpitopeName<-("CD8")
-# EpitopeCurrent<-c("x59","x64","x66","x68")
-# AMA <- FALSE
-
-# #CSP Combined T-cell
-# CurrentEpitopeName<-("Combined")
-# EpitopeCurrent<-c("x25","x28","x29","x31","x59","x64","x66","x68")
-# AMA <- FALSE
-# 
-# # #AMA
-# CurrentEpitopeName<-("AMA")
-# EpitopeCurrent<-c("x36","x44","x77","x90")
-# AMA <- TRUE
-
-
-```
 
 # Load sequence data
 
@@ -161,7 +171,7 @@ length(haplotypelist$HType)
 
 ## Translate nucleotide sequence to AAs
 csp
-```{r, warning=FALSE}
+```{r,warning = FALSE, message=FALSE, eval = !AMA}
 #CSP is translated in reverse and starting at the 3rd nucleotide
 DNAseqrev<-reverseComplement(seqs)
 DNAseqrev <- DNAStringSet(DNAseqrev, start=3)
@@ -247,13 +257,24 @@ cat("number of unique sequences",length(unique(AAdf$x)))
 
 ```
 
+number of variant positions in human samples
+```{r}
+nrow(AAdf %>%
+  pivot_longer(3:(ncol(AAdf)), names_to = "position", names_prefix = "x", values_to = "AA") %>%
+  group_by(position) %>%
+  summarise(n_distinct_AA = n_distinct(AA)) %>%
+  filter(n_distinct_AA > 1))
+```
+
+
+
 Separating each samples haplotypes into individual rows and make them into a list of unique haplotypes
 ```{r, warning=F,message=F}
 haplotypesExp<-tidyr::separate_rows(haplotypes, haplotype_list, sep=",")
 haplotypesExp$HType<-haplotypesExp$haplotype_list
 MergHaploAA<-merge(haplotypesExp,AAdf,by="HType")
 dim(MergHaploAA)
-#We lose 7 haplotype occurences because upon merging due to removing sequences with stop codons.
+
 
 
 ```
@@ -262,7 +283,8 @@ dim(MergHaploAA)
 
 ```{r, warning=F,message=F}
 MergedData<-merge(HDS,MergHaploAA,by="sample_name_dbs")
-#we lost a number of samples here - perhaps due to NA values in asym/sym status?
+
+
 MergedData$symptomatic_status<-as.factor(MergedData$symptomatic_status)
 MergedData$sample_id_date<-as.Date(MergedData$sample_id_date)
 ```
@@ -320,14 +342,14 @@ aadata_to_export$difAAvsHap = aadata_to_export$epitopecount-aadata_to_export$hap
 ## AA types
 Time to, starting from any epitope in a sample that is not followed by a sample with the same epitope
 ```{r,fig.width=2.5,fig.height=5}
-TimeToDataAdvEpitope=HumanData%>%
+TimeToDataAdvEpitope =HumanData%>%
   mutate(symptomatic_status = ifelse(is.na(main_exposure_primary_case_def), as.character(main_outcome_primary_case_def),as.character(main_exposure_primary_case_def))) %>%
   arrange(unq_memID, sample_id_date) %>% 
   group_by(unq_memID) %>%
   #add columns for previous symptomatic status so that we can filter out infections within 14 days of a symptomatic infection
   mutate(Sx_prev = lag(symptomatic_status,1),
          days_since_prev = ymd(sample_id_date) - ymd(lag(sample_id_date,1))) %>%
-  #remove positive samples within 14 days of a symptomatic infection (there are 25 of them)
+  #remove positive samples within 14 days of a symptomatic infection 
   filter(Sx_prev != "symptomatic infection"| is.na(Sx_prev) | days_since_prev > days(14) | pf_pcr_infection_status != "positive") %>%
   ungroup() %>%
   arrange(unq_memID, sample_id_date) %>% 
@@ -400,7 +422,7 @@ homol_fig <- ggsurvplot(homol_fit_surv,risk.table = TRUE,
                 font.tickslab = c(8),
                 fontsize = 4,
                 risk.table.fontsize = 4,
-                palette = c("#00BFC4", "#F8766D"),
+                palette = strat_colors,
                 tables.theme = theme_cleantable(),
                 tables.height = 0.25,
                 tables.col = "strata",
@@ -453,7 +475,7 @@ homol_fig_2 <- ggsurvplot(homol_fit_surv_2,risk.table = TRUE,
                 font.tickslab = c(8),
                 fontsize = 4,
                 risk.table.fontsize = 4,
-                palette = c("#00BFC4", "#F8766D"),
+                palette = strat_colors,
                 tables.theme = theme_cleantable(),
                 tables.height = 0.25,
                 tables.col = "strata",
@@ -494,7 +516,7 @@ coxmetable1$label[4]="Age >15"
 coxmetable1$label[5]="Type prevalence"
 coxmetable1$label[6]="Mosquitoes > 50"
 coxmetable1
-coxplot1=ggplot(coxmetable1 %>% rename("aHR" = "exp(coeff1)"),aes(y=label,x=aHR,xmin=`2.5 %`, xmax=`97.5 %`))+
+coxplot1=ggplot(coxmetable1 %>% rename("aHR" = `exp(coeff1)`),aes(y=label,x=aHR,xmin=`2.5 %`, xmax=`97.5 %`))+
   geom_pointrange(size=1,shape=18)+
   geom_vline(xintercept=1, lty=2)+
   theme_bw()+
@@ -520,6 +542,10 @@ epitope_props <- TimeToDataAdvEpitope %>%
   complete(cutoff_60, AAs, fill = list(n_AAs = 0, prop_AAs = 0)) %>%
   unique()
 
+epitope_props %>%
+  filter(cutoff_60 == 1) %>%
+  arrange(desc(prop_AAs))
+
 
 freq_compare <- epitope_props %>%
   select(-n_AAs) %>%
@@ -537,10 +563,11 @@ freq_compare
 saveRDS(freq_compare, paste0("figures/robj/", CurrentEpitopeName,"_freq_compare_cutoff60.RDS"))
 
 
-epitope_props %>%
+print(epitope_props %>%
   arrange(AAs) %>%
   ungroup() %>%
-  summarise(wilcoxp = wilcox.test(prop_AAs[cutoff_60 == 1], prop_AAs[cutoff_60 == 0], paired = TRUE)$p.value) 
+  summarise(wilcoxp = wilcox.test(prop_AAs[cutoff_60 == 1], prop_AAs[cutoff_60 == 0], paired = TRUE)$p.value), n = 100)
+
 
 
 ```
@@ -582,8 +609,57 @@ saveRDS(indiv_times_fig, paste0("figures/robj/", CurrentEpitopeName,"_individual
 ## Epitope type prevalence analysis
 We want to know how whether there is an effect-measure modification of epitope type prevalence(common, middling, rare) on the effect of symptomaticity on time to reinfection.
 
-First, we'll make a figure with the 1-yr risk of homologous reinfection for each epitope type overlayed with the number of infections with that type.
-```{r, eval = !AMA}
+
+First, we will break the epitope types up into three categories based on prevalence: common, middling, and rare. We will divide them such that there are approx equal number of infections in each category.
+```{r}
+
+quant_cut <- function(x, n) {
+    qs <- quantile(x, (1:(n-1))/n) #sets the quantile breaks of interest
+    brks <- c(-Inf, qs, Inf)
+    cut(x, breaks=brks, labels=FALSE,right=T)
+}
+
+
+#Defining a variable quant that divides the epitope types into three groups based on the number of infections. Will do slightly differently for Th2R and Th3R to get most even groups possible.
+
+if(CurrentEpitopeName != "CD8") {
+
+TimeToDataAdvEpitope_60$quant <- quant_cut(TimeToDataAdvEpitope_60$freq, 3)
+#Common = 3, Middling = 2, Rare = 1
+
+} else{
+
+quant <- TimeToDataAdvEpitope_60 %>%
+  group_by(AAs) %>%
+  tally() %>%
+  arrange(n) %>%
+  mutate(sum = cumsum(n)) %>%
+  mutate(quant = cut(sum, breaks = 3, labels = FALSE, right = TRUE))
+
+TimeToDataAdvEpitope_60 <- TimeToDataAdvEpitope_60 %>%
+  left_join(quant %>% select(AAs, quant))
+
+}
+
+
+
+#Quick checks that the divisions make sense
+summary(as.factor(TimeToDataAdvEpitope_60$quant))
+
+TimeToDataAdvEpitope_60 %>%
+  ggplot(aes(x = quant, fill = AAs)) +
+  geom_bar() +
+  theme_bw()
+
+
+
+```
+Next, we'll make a figure with the 1-yr risk of homologous reinfection for each epitope type overlaid with the number of infections with that type.
+```{r}
+
+quant_summary <- TimeToDataAdvEpitope_60 %>%
+  group_by(AAs) %>%
+  summarise(quant = mean(quant))
 
 AA1ySummary <- summary(survfit(Surv(Days,EventCensored)~AAs + symptomatic_status,data=TimeToDataAdvEpitope_60),times=365.25,extend=TRUE)
 
@@ -591,7 +667,8 @@ AA1ySummary <- summary(survfit(Surv(Days,EventCensored)~AAs + symptomatic_status
 AA1ySummary_df <- as_tibble(as.data.frame(AA1ySummary$table) %>% rownames_to_column()) %>%
   separate(rowname, into = c("AAs", "symptomatic_status"), sep = ", ") %>%
   mutate(AAs = str_trim(gsub(".*=", "", AAs)), symptomatic_status = str_trim(gsub(".*=", "", symptomatic_status))) %>%
-  bind_cols(surv = AA1ySummary$surv, survse = AA1ySummary$std.err)
+  bind_cols(surv = AA1ySummary$surv, survse = AA1ySummary$std.err) %>%
+  left_join(quant_summary)
 
 
 type_prevalence_risk_fig <- AA1ySummary_df %>%
@@ -603,40 +680,22 @@ type_prevalence_risk_fig <- AA1ySummary_df %>%
     geom_bar(aes(y = records/300), alpha = 0.2, stat = "identity") +
     scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1),sec.axis = sec_axis(~.*300, name = "Number of infections",breaks=c(50,100,150,200,250,300,350))) +
     geom_point(aes(y=risk,fill=symptomatic_status),shape=21,position=position_dodge(width=0.3), size=3)+
+    scale_fill_manual(values = rev(strat_colors)) +
+    facet_grid(.~factor(quant, levels = c(3,2,1), labels = c("Common", "Middling", "Rare")), scales = "free", space = "free") +
     labs(color = "Symptomaticity", fill = "Symptomaticity", y = "1-year risk of homologous reinfection", x = paste0(CurrentEpitopeName, " epitope type")) +
     theme_classic2() +
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), legend.position = "top")
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), legend.position = "top", strip.background = element_rect(size = 0.5))
+
+
+type_prevalence_risk_fig
+
+saveRDS(type_prevalence_risk_fig, paste0("figures/robj/", CurrentEpitopeName,"_type_prevalence_risk_fig.RDS"))
 
 ```
 
-Now we will break the epitope types up into three categories based on prevalence: common, middling, and rare. We will divide them such that there are approx equal number of infections in each category.
-```{r, eval = !AMA}
 
-quant_cut <- function(x, n) {
-    qs <- quantile(x, (1:(n-1))/n) #sets the quantile breaks of interest
-    brks <- c(-Inf, qs, Inf)
-    cut(x, breaks=brks, labels=FALSE,right=T)
-}
-
-
-#Defining a variable quant that divides the epitope types into three groups based on the number of infections 
-TimeToDataAdvEpitope_60$quant <- quant_cut(TimeToDataAdvEpitope_60$freq, 3)
-#Common = 3, Middling = 2, Rare = 1
-
-#Quick checks that the divisions make sense
-summary(as.factor(TimeToDataAdvEpitope_60$quant))
-
-TimeToDataAdvEpitope_60 %>%
-  ggplot(aes(x = quant, fill = AAs)) +
-  geom_bar() +
-  theme_bw()
-
-```
-
-ERICA START HERE!
 Now we'll look to see if there is effect measure modification...
-```{r, eval = !AMA}
-#will only run for CSP epitopes
+```{r}
 
 
 #Checking quant variable. Crosstab with symptomatic status:
@@ -651,11 +710,11 @@ summary(model_crude)
 #Fit a crude with an interaction term 
 model_crude_int <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + symptomatic_bin*quant + (1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron")
 summary(model_crude_int)
-#p-value of interaction term: 0.038
+
 
 #Likelihood ratio test
 anova(model_crude, model_crude_int)
-#p-value: 2.2e-16 
+
 
 #Fit the full model 
 model <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + ageCat + freq+mosquito_prev_2weeks_cat+(1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron")
@@ -663,32 +722,75 @@ model <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + ageCat + fr
 #Fit a full model with an interaction term 
 model_full <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + ageCat + freq+mosquito_prev_2weeks_cat + symptomatic_bin*quant + (1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron")
 summary(model_full)
-#p-value of interaction term:4.0e-02
+
 
 #Likelihood ratio test
 anova(model, model_full)
-#p-value: 0.09559
+
 
 
 #Fit 3 stratified models for each prevalence category
 model_1 <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + ageCat + freq+mosquito_prev_2weeks_cat+(1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron", subset = quant==1)
 summary(model_1)
 exp(confint(model_1,method="Wald"))
-#HR: 0.35 (0.16, 0.77)
+
 
 model_2 <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + ageCat + freq+mosquito_prev_2weeks_cat+(1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron", subset = quant==2)
 summary(model_2)
 exp(confint(model_2,method="Wald"))
-#HR: 0.52 (0.28, 0.95)
+
 
 model_3 <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + ageCat + freq+mosquito_prev_2weeks_cat+(1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron", subset = quant==3)
 summary(model_3)
 exp(confint(model_3,method="Wald"))
-#HR:0.71 (0.44, 1.15)
+
 
 symp_table <- xtabs(~symptomatic_status+quant, data=TimeToDataAdvEpitope_60)
 ftable(symp_table)
 summary(symp_table)
+
+```
+Making a summary figure
+```{r}
+
+effect_meas_mod_summary <- data.frame(model_1$coefficients) %>% 
+  rownames_to_column(var = "variable") %>%
+  mutate(quant = "Rare") %>%
+  rename("coeff" = "model_1.coefficients") %>%
+  left_join(data.frame(exp(confint(model_1,method="Wald"))) %>%
+              rownames_to_column(var = "variable") %>%
+              mutate(quant = "Rare") %>%
+              rename("lower" = "X2.5..", "upper" = "X97.5..")) %>%
+  rbind(data.frame(model_2$coefficients) %>% 
+  rownames_to_column(var = "variable") %>%
+  mutate(quant = "Middling") %>%
+    rename("coeff" = "model_2.coefficients") %>%
+  left_join(data.frame(exp(confint(model_2,method="Wald"))) %>%
+              rownames_to_column(var = "variable") %>%
+              mutate(quant = "Middling") %>%
+              rename("lower" = "X2.5..", "upper" = "X97.5.."))) %>%
+    rbind(data.frame(model_3$coefficients) %>% 
+  rownames_to_column(var = "variable") %>%
+  mutate(quant = "Common") %>%
+    rename("coeff" = "model_3.coefficients") %>%
+  left_join(data.frame(exp(confint(model_3,method="Wald"))) %>%
+              rownames_to_column(var = "variable") %>%
+              mutate(quant = "Common") %>%
+              rename("lower" = "X2.5..", "upper" = "X97.5.."))) %>%
+  mutate(aHR = exp(coeff))
+
+effect_mod_summary_fig <- effect_meas_mod_summary %>%
+  filter(variable == "symptomatic_bin") %>%
+  ggplot() +
+  ggstance::geom_pointrangeh(aes(x = aHR, xmin = lower, xmax = upper, y = fct_rev(factor(quant)))) +
+  geom_vline(xintercept = 1, linetype = "dashed") +
+  labs(y = "", x = "Symptomatic Adj. HR (95%)") +
+  #scale_x_continuous(limits = c(0.1, 1.3)) +
+  theme_bw()
+
+effect_mod_summary_fig
+
+saveRDS(effect_mod_summary_fig, paste0("figures/robj/", CurrentEpitopeName,"_effect_mod.RDS"))
 
 ```
 
@@ -770,7 +872,6 @@ perm_data <- lapply(1:1000, function(x){
 perm_plot <- ggplot(perm_data %>% bind_rows() %>% filter(EventCensored == 1, cutoff_60 == 1), aes(x = Days, color = as.character(perm))) +
   geom_density() +
   scale_color_manual(values = replicate("lightgrey", n = 1000))+
-  #geom_density(data = perm_data %>% bind_rows() %>% filter(EventCensored == 1, perm %in% chosen_curve$perm), mapping = aes(x = Days), color = "black")+
   labs(y = "Density", x = "Time to reinfection (randomized)") +
   theme_bw() +
   theme(legend.position = "none")
@@ -785,7 +886,12 @@ saveRDS(perm_plot, paste0("figures/robj/", CurrentEpitopeName,"_perm_data_time_d
 ## Overall survival in randomized datasets
 Look at time to reinfection in the 1000 datasets
 ```{r}
-surv_data <- fortify(survfit(Surv(Days,EventCensored)~1,data=TimeToDataAdvEpitope_60))
+surv_data_overall <- survfit(Surv(Days,EventCensored)~1,data=TimeToDataAdvEpitope_60)
+
+surv_data_overall
+summary(surv_data_overall, times = 365.25)
+
+surv_data <- fortify(surv_data_overall)
 
 
 perm_surv_overall <- lapply(1:1000, function(x){
@@ -834,6 +940,51 @@ saveRDS(homol_random_fig, paste0("figures/robj/", CurrentEpitopeName,"_homolvran
 
 
 ```
+Log-rank tests for homol v random
+```{r}
+homol_random_logrank <- lapply(1:1000, function(x){
+  broom::glance(survdiff(Surv(Days,EventCensored)~dataset,
+          data=perm_data[[x]] %>% 
+            select(sample_name_dbs, Days, EventCensored, perm) %>%
+            mutate(dataset = "random") %>%
+            rbind(TimeToDataAdvEpitope_60 %>% 
+                    select(sample_name_dbs, Days, EventCensored) %>%
+                    mutate(dataset = "data", perm = NA))))
+
+}) 
+
+homol_random_logrank_t <- homol_random_logrank %>%
+  transpose()
+
+homol_random_logrank_stats <- tibble(chisq = unlist(homol_random_logrank_t$statistic), p.value = unlist(homol_random_logrank_t$p.value))
+
+
+homol_random_chisq_fig <- homol_random_logrank_stats %>%
+  ggplot() +
+  geom_histogram(aes(x = chisq), bins = 100) +
+  labs(y = "Count", x = "Chi Squared Test Statistic") +
+  theme_bw()
+
+
+homol_random_chisq_fig
+
+saveRDS(homol_random_chisq_fig, paste0("figures/robj/", CurrentEpitopeName, "_homol_random_chisq_fig.RDS"))
+
+homol_random_p_fig <- homol_random_logrank_stats %>%
+  ggplot() +
+  geom_histogram(aes(x = p.value), bins = 100) +
+  scale_x_continuous(trans = "log10") +
+  labs(y = "Count", x = "P value") +
+  theme_bw()
+
+homol_random_p_fig
+
+saveRDS(homol_random_p_fig, paste0("figures/robj/", CurrentEpitopeName, "_homol_random_p_fig.RDS"))
+
+homol_random_logrank_stats %>%
+  summarise(med_chisq = median(chisq), med_p = median(p.value))
+
+```
 
 
 
@@ -845,7 +996,7 @@ perm_surv <- lapply(1:1000, function(x){
 })
 
 perm_survdiff <- lapply(1:1000, function(x){
-  survdiff(Surv(Days,EventCensored)~symptomatic_status,data=perm_data[[x]])
+  broom::glance(survdiff(Surv(Days,EventCensored)~symptomatic_status,data=perm_data[[x]]))
 })
 
 
@@ -853,26 +1004,36 @@ perm_survdiff_t <- perm_survdiff %>%
   transpose()
 
 
-data_survdiff <- survdiff(Surv(Days,EventCensored)~symptomatic_status,data=TimeToDataAdvEpitope_60)
+data_survdiff <- broom::glance(survdiff(Surv(Days,EventCensored)~symptomatic_status,data=TimeToDataAdvEpitope_60))
 
 
-random_logrank_figure <- tibble(chisq = unlist(perm_survdiff_t$chisq)) %>%
+random_logrank_figure <- tibble(statistic = unlist(perm_survdiff_t$statistic), p.value = unlist(perm_survdiff_t$p.value)) %>%
+  mutate(data = "Random") %>%
+  rbind(data_survdiff %>%
+          select(-df) %>%
+          mutate(data = "Homologous")) %>% #add data chisq here
   ggplot() +
-  geom_histogram(aes(x = chisq), bins = 100) +
-  #geom_vline(xintercept = c(0.001, 5.024)) +
-  geom_point(mapping = aes(x = data_survdiff$chisq, y = 0), color = "darkred", size = 5) +
-  labs(y = "Count", x = "Test Statistic") +
+  geom_histogram(aes(x = statistic, fill = data), bins = 100) +
+  geom_point(aes(x = statistic, y = 0, alpha = data), color = "darkred", size = 5) +
+  scale_alpha_manual(values = c(1,0), guide = "none") +
+  scale_fill_manual(values = c("darkred", "darkgrey")) +
+  labs(y = "Count", x = "Chi Squared Test Statistic", fill = "Dataset") +
   theme_bw()
 
 random_logrank_figure
 
 saveRDS(random_logrank_figure, paste0("figures/robj/", CurrentEpitopeName,"_random_logrank_chisq_fig.RDS"))
 
-nrow(tibble(chisq = unlist(perm_survdiff_t$chisq)) %>%
-       filter(chisq < 0.001 | chisq > 5.024))
 
-nrow(tibble(chisq = unlist(perm_survdiff_t$chisq)) %>%
-       filter(chisq <= data_survdiff$chisq))/1000
+nrow(tibble(p = unlist(perm_survdiff_t$p.value)) %>%
+       filter(p <= 0.05))
+
+nrow(tibble(chisq = unlist(perm_survdiff_t$statistic)) %>%
+       filter(chisq >= data_survdiff$statistic[1]))/1000
+
+median(unlist(perm_survdiff_t$p.value))
+
+median(unlist(perm_survdiff_t$statistic))
 
 ```
 
@@ -899,9 +1060,11 @@ random_SxAsx_addforplot <- random_SxAsx_avg %>%
 
 random_strata_fig <- random_SxAsx_addforplot %>%
   ggplot(aes(x = time, y = med_surv, color = factor(strata, levels = c("symptomatic infection","asymptomatic infection"), labels = c("Sx", "Asx")))) +
+  scale_color_manual(values = rev(strat_colors)) +
   geom_line(aes(x = time, y = med_surv))+
   geom_line(data = tibble(time = c(0,61,0,61), med_surv = c(1,1,1,1), strata = c("asymptomatic infection","asymptomatic infection","symptomatic infection","symptomatic infection")))+
   geom_ribbon(aes(x = time, y = med_surv, ymin = lowerCI, ymax = upperCI, fill = factor(strata, levels = c("symptomatic infection","asymptomatic infection"), labels = c("Sx", "Asx"))), alpha = 0.3, color = NA)+
+  scale_fill_manual(values = rev(strat_colors)) +
   labs(color = "Index exposure", fill = "Index exposure", y = "Median probability of survival without reinfection", x = "Time in days") +
   scale_y_continuous(limits = c(0,1))+
   theme_bw()
@@ -957,9 +1120,11 @@ random_aHR_fig <- random_coxme_coeff %>%
   group_by(variable) %>%
   summarise(med = median(aHR), min = min(aHR), max = max(aHR)) %>%
   left_join(random_confint_summary) %>%
-  mutate(variable = factor(variable, levels = c("symptomatic_statsussymptomatic infection", "mosquito_prev_2weeks_cat>50 mosquitoes", "gendermale", "freq", "ageCat5-15", "ageCat>15"), labels = c("Symptomatic", "Mosquitoes > 50", "Male", "Type prevalence", "Age 5-15", "Age > 15"))) %>%
+  mutate(variable = factor(variable, levels = c("symptomatic_statussymptomatic infection", "mosquito_prev_2weeks_cat> 50 mosquitoes", "gendermale", "freq", "ageCat5-15", "ageCat>15"), labels = c("Symptomatic", "Mosquitoes > 50", "Male", "Type prevalence", "Age 5-15", "Age > 15"))) %>%
   ggplot() +
-  ggstance::geom_pointrangeh(aes(x = med, xmin = lower, xmax = upper, y = variable)) +
+  ggstance::geom_pointrangeh(aes(x = med, xmin = lower, xmax = upper, y = fct_rev(variable))) +
+  geom_vline(xintercept = 1, linetype = "dashed") +
+  labs(y = "", x = "Adj. HR (95%)") +
   theme_bw()
 
 random_aHR_fig
@@ -967,10 +1132,10 @@ random_aHR_fig
 saveRDS(random_aHR_fig, paste0("figures/robj/", CurrentEpitopeName,"_random_coxme_fig.RDS"))
 
 
+random_aHR_fig$data
 
 ```
 
 
-rmarkdown::render("C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/Once Bitten/epitopes/MozzieAminoAcidAnalysis/homologous_reinfection_choose_epitope.Rmd", output_file= paste0(CurrentEpitopeName, "_homologous_reinfection_", format(now(), "%Y%m%d_%H%M%S_"), ".html"), encoding = 'UTF-8', knit_root_dir = "C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/Once Bitten/")
 
-rmarkdown::render("C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/Once Bitten/mozzie_epitope_analysis/code/homologous_reinfection_choose_epitope.Rmd", output_file= paste0(CurrentEpitopeName, "_homologous_reinfection_", format(now(), "%Y%m%d_%H%M%S_"), ".html"), encoding = 'UTF-8', knit_root_dir = "C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/Once Bitten/mozzie_epitope_analysis")
+rmarkdown::render("C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/mozzie_epitope_analysis/code/homologous_reinfection_choose_epitope.Rmd", output_file= paste0(CurrentEpitopeName, "_homologous_reinfection_", format(now(), "%Y%m%d_%H%M%S_"), ".html"), encoding = 'UTF-8', knit_root_dir = "C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/mozzie_epitope_analysis")

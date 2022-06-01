@@ -1,0 +1,579 @@
+---
+title: "Random Forest on target sequences"
+author: "Christine Markwalter"
+date: "4/14/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(dpi=300)
+grDevices::pdf.options(useDingbats = FALSE)
+library(Biostrings)
+#library(ggplot2) #redundant
+#library(dplyr) #redundant
+library(tidyverse)
+library(ggpmisc)
+library(lubridate)
+library(randomForest)
+
+library(survival)
+library(survminer)
+library(coxme)
+library(forestplot)
+
+library(ggfortify)
+library(ggseqlogo)
+library(arsenal)
+
+library(ggpubr)
+```
+
+
+
+#  Script for analyzing CSP and AMA in malaria infections.
+The purpose of this script is to analyze the amino acids of CSP or AMA1 sequences from a 14 month longitudinal study in 3 villages in western Kenya with 239 participants. First part of the script is translating sequences and determining most important AA positions. 
+
+# Options 
+
+AMA or CSP
+```{r,echo=T}
+# Select which gene to analyze CSP or AMA
+AMA<-TRUE
+#AMA<-FALSE
+```
+
+
+# Load in sequence data:
+
+CSP
+```{r, warning=F,message=F}
+
+seqs <- Biostrings::readDNAStringSet("data/original/spat21_CSP_uniqueSeqs_final_censored.fasta")
+
+
+haplotypes<-read.csv("data/original/spat21_csp_summarized_haplotype_list_31DEC2019.csv")
+```
+ 
+ AMA
+```{r, warning=F,message=F,eval=AMA}
+
+seqs <- Biostrings::readDNAStringSet("data/original/spat21_AMA_uniqueSeqs_final_censored.fasta")
+
+haplotypes<-read.csv("data/original/spat21_ama_summarized_haplotype_list_31DEC2019.csv")
+
+```
+
+```{r}
+head(seqs)
+head(haplotypes)
+```
+
+Start of the haplotype analysis with focus on SNPs and AA substitutions
+
+# remove the mosquito samples from the data set
+
+```{r, warning=F,message=F}
+haplotypes = haplotypes %>%
+  filter(!(str_detect(sample_name_dbs,"H")) & !(str_detect(sample_name_dbs,"A")) | sample_name_dbs == "K14-170717-1A-R") #might want to adjust to make more robust filtering
+
+#make list of haplotypes found in human samples
+haplotypelist=haplotypes%>%
+  separate_rows(haplotype_list)%>%
+  summarise(HType=paste(unique(haplotype_list)))
+
+#Replace haplotype names to match them with seq names
+haplotypelist$HType=sub('.', '', haplotypelist$HType)
+haplotypelist=haplotypelist%>%
+  mutate(seqs=paste("Seq",HType,sep=""))
+
+length(haplotypelist$HType)
+
+```
+
+
+
+# Read in human demographic data
+```{r, warning=F,message=F}
+HumanData<-read.csv("data/original/spat21_human_final_censored_data_for_dissertation_with_exposure_outcome_1MAR2020.csv")
+
+HDS<-HumanData %>% 
+  dplyr::select(sample_name_dbs,unq_memID,sample_id_date,main_outcome_primary_case_def,main_exposure_primary_case_def)%>%
+  filter(main_exposure_primary_case_def == "asymptomatic infection" | main_outcome_primary_case_def == "symptomatic infection") %>%
+  mutate(symptomatic_status = ifelse(is.na(main_exposure_primary_case_def), as.character(main_outcome_primary_case_def),as.character(main_exposure_primary_case_def))) %>%
+  dplyr::select(-c(main_exposure_primary_case_def,main_outcome_primary_case_def))
+head(HDS)
+```
+
+
+Translate CSP or AMA nucleotide sequence to amino acid sequence
+CSP
+```{r, warning=FALSE}
+#CSP is translated in reverse and starting at the 3rd nucleotide
+DNAseqrev<-reverseComplement(seqs)
+DNAseqrev <- DNAStringSet(DNAseqrev, start=3)
+length(unique(DNAseqrev))
+
+AAseq<-translate(DNAseqrev, genetic.code=GENETIC_CODE, no.init.codon=FALSE,
+             if.fuzzy.codon="error")
+
+AAseqmatrix<-consensusMatrix(AAseq, as.prob = TRUE)
+AArevmatrixvariant=AAseqmatrix
+```
+AMA
+```{r, warning=FALSE,eval=AMA}
+#This runs when AMA = True
+length(unique(seqs))
+#Correct start of translation AMA is translated from the 3rd nucleotide
+seqs3<- DNAStringSet(seqs, start=3)
+AAseq=translate(seqs3)
+length(unique(AAseq))
+
+AAseqmatrix<-consensusMatrix(AAseq, as.prob = TRUE)
+```
+
+```{r}
+#Change sequences to dataframe and combine them with haplotype name to match with human data
+AAdf<-as.data.frame(AAseq)
+AAdf<-cbind(seq = rownames(AAdf), AAdf)
+rownames(AAdf)<-1:nrow(AAdf)
+AAdf$HType=paste("H",sub('...', '', AAdf$seq),sep="")
+length(unique(AAdf$x))
+
+```
+
+Removing invariant aa positions
+```{r, warning=F,message=F}
+AAseqmatrix<-as.data.frame(AAseqmatrix)
+variantAA<-AAseqmatrix %>%
+  #Convert column from factor to numeric
+  mutate_all(~as.numeric(as.character(.))) %>%
+  #de-select column whose max value is 1 
+  select_if(~max(., na.rm = TRUE) != 1)
+colnames(variantAA) <- sub("V", "", colnames(variantAA))
+poslist<-names(variantAA)
+AAseq[[1]]
+AAseq[[1]][as.numeric(poslist)]
+
+
+#Make every variant aa position into a column and append it to the AA dataframe
+for(i in as.numeric(poslist)){
+  AApos<-as.data.frame(subseq(AAseq,i,i)) #takes first amino acid position for all 298 sequences
+  AApos[,1]<-as.factor(AApos[,1])
+  colnames(AApos)<- paste("x", i, sep = "")
+  AAdf[ , ncol(AAdf) + 1] <- AApos 
+}
+ 
+
+```
+
+
+# filter protein sequences only in haplotypes present in human samples
+
+```{r}
+AAdf <- AAdf%>%
+  filter(seq %in% haplotypelist$seqs)
+length(unique(AAdf$x))
+```
+
+
+# removing sequences with stop codons
+```{r,eval=T}
+AAdf$nstopcodon <- vcountPattern("*", AAdf$x, max.mismatch=0)
+AAdf%>%
+  group_by(nstopcodon)%>%
+  count()
+cat("number of stopcodons:", sum(AAdf$nstopcodon))
+AAdf=AAdf%>%
+  filter(nstopcodon==0)%>%
+  select(-nstopcodon,-seq)
+cat("number of sequences without stop codons", length(AAdf$x))
+cat("number of unique sequences",length(unique(AAdf$x)))
+
+```
+
+
+
+Separating each samples haplotypes into individual rows and make them into a list of unique haplotypes
+```{r, warning=F,message=F}
+haplotypesExp<-tidyr::separate_rows(haplotypes, haplotype_list, sep=",")
+haplotypesExp$HType<-haplotypesExp$haplotype_list
+MergHaploAA<-merge(haplotypesExp,AAdf,by="HType")
+dim(MergHaploAA)
+
+
+
+```
+
+
+# Beginning of Random Forest modelling part
+following sections aims to understand the importance of each amino acid position in relation to other positions. AA substitutions  are likely conditioned on other aa positions, and the RF models aim to put a value to the importance of each position in the prediction of the full nucleotide sequence.
+
+Evaluating mtry random forest parameter to determine number of random variables in each tree
+```{r,eval=IncludeRandomForest}
+MergHaploAA$HType<-as.factor(MergHaploAA$HType)
+set.seed(12345)
+tuneRF(x=MergHaploAA[,7:58],y=MergHaploAA[,1],mtryStart=5,ntreetry=100,stepFactor=2)
+```
+
+
+# Random forest to identify most predictive amino acids
+```{r, warning=F,message=F,fig.width=3,fig.height=3,eval=IncludeRandomForest}
+MergHaploAA$HType<-as.factor(MergHaploAA$HType)
+set.seed(12345)
+fitAllaa <- randomForest(HType~.-sample_name_dbs-haplotype_list-x-haplotype_number-haplotype_reads,
+                    data=MergHaploAA,
+                    mtry=10,
+                    importance=TRUE,
+                    na.action=na.omit,
+                    ntree=2000)
+
+
+aatop=importance(fitAllaa, type=1) #type = 1 specifies importance measure as mean decrease in accuracy
+aatop=as.data.frame(aatop)
+aatop$label<-row.names(aatop)
+aatop=rev(aatop[order(-aatop$MeanDecreaseAccuracy),])
+aatop<-head(aatop,n=10)
+cat("OOB error rate",tail(fitAllaa$err.rate[,1],n=1))
+
+```
+Rank importance of each amino acid position
+```{r,eval=IncludeRandomForest}
+importance = importance(fitAllaa)
+varImportance = data.frame(Variables = row.names(importance),
+ Importance =round(importance[, "MeanDecreaseAccuracy"],2))
+
+rankImportance=varImportance%>%
+  mutate(Rank=paste("#",dense_rank(desc(Importance))))
+
+rankImportance$Variables= sub('.', '', rankImportance$Variables)
+rankImportance$Variables=as.numeric(rankImportance$Variables)
+```
+
+
+# Fig1A
+sequence logo of amino acid sequences with known CSP T-cell epitope locations marked
+```{r message=FALSE, warning=FALSE,fig.width=8.75,fig.height=2}
+AAdffig1=AAdf%>%
+  select(x)
+
+fig1_csp=AAdffig1%>%
+  ggplot(aes())+ 
+  annotate('rect', xmin = 17.5, xmax = 34.5, ymin = -0.05, ymax = 1.3, alpha = .1, col='black', fill='red')+
+  annotate('rect', xmin = 58.5, xmax = 70.5, ymin = -0.05, ymax = 1.3, alpha = .1, col='black', fill='yellow')+
+  geom_logo(data=AAdffig1,method="probability", fill = "grey10", color = "grey10", width = 0.9, font = "helvetica_light")+
+  theme_classic()+
+  theme(legend.position = "none")+
+  scale_x_continuous(name="Amino acid position", limits=c(0, 96),breaks=seq(5,95,5))+
+  coord_cartesian(xlim = c(4,91)) +
+  annotate('text', x=26, y=1.15, label='Th2R')+
+  annotate('text', x=64.5, y=1.15, label='Th3R')
+
+fig1_csp$scales$scales[[1]] <- scale_x_continuous(name="Amino acid position", limits=c(0, 96),breaks=seq(2,92,5),labels=seq(295,385,5))
+
+fig1_csp
+
+saveRDS(fig1_csp, "figures/robj/csp_seqlogo_black.RDS")
+```
+
+
+#Fig1Ama
+sequence logo with AMA T-cell epitopes marked
+```{r message=FALSE, warning=FALSE,fig.width=8.75,fig.height=2}
+AAdffig1=AAdf%>%
+  select(x)
+
+#cL1 is 196-206
+
+fig1_ama=AAdffig1%>%
+  select(x)%>%
+  ggplot(aes())+ 
+  annotate('rect', xmin = 42.5, xmax = 53.5, ymin = -0.05, ymax = 1.3, alpha = .1, col='black', fill='green')+
+  geom_logo(data=AAdffig1,method="probability", fill = "grey10", color = "grey10", width = 0.9, font = "helvetica_light")+
+  theme_classic()+
+  theme(legend.position = "top")+
+  scale_x_continuous(name="Amino acid position", limits=c(0, 100),breaks=seq(5,95,5))+
+  coord_cartesian(xlim = c(4,95)) +
+  annotate('text', x=48, y=1.15, label='c1L')
+
+fig1_ama$scales$scales[[1]] <- scale_x_continuous(name="Amino acid position", limits=c(0, 100),breaks=seq(2,97,5),labels=seq(155,250,5))
+
+fig1_ama
+
+saveRDS(fig1_ama, "figures/robj/ama_seqlogo_black.RDS")
+
+
+
+```
+
+
+
+# Fig1B
+figure of RF model importance (mean decrease accuracy) for each amino acid position with the top 10 marked in yellow
+
+CSP
+```{r,fig.width=8.75,fig.height=2.5,eval=IncludeRandomForest}
+fig1B_csp=rankImportance%>%
+  arrange(Variables)%>%
+  mutate(Rank=as.numeric(sub('.','',rankImportance$Rank)))%>%
+  mutate(topcolor = if_else(Rank < 11 ,"top10",""))%>%
+  ggplot(aes(x=(Variables),y=Importance,fill=topcolor))+
+  geom_bar(stat="identity", color = "white") +
+  labs(x = "Amino acid position",y="Mean decrease accuracy")+
+  guides(fill=F)+
+  theme_classic()+
+  #scale_x_continuous(name="Amino acid position", limits=c(0, 96),breaks=seq(5,95,5))+
+  scale_x_continuous(name="Amino acid position", limits=c(0, 96), breaks=seq(2,92,5), labels=seq(295,385,5))+
+  coord_cartesian(xlim = c(4,91))+
+  scale_fill_manual(values=c("#555555", "#E69F00"))
+fig1B_csp
+
+
+saveRDS(fig1B_csp, "figures/robj/MDA_csp_topten.RDS")
+
+#epitopes only
+
+fig1B_csp_8=rankImportance%>%
+  arrange(Variables)%>%
+  mutate(Rank=as.numeric(sub('.','',rankImportance$Rank)))%>%
+  mutate(topcolor = if_else(Variables %in% c(25,28,29,31,59,64,66,68), "top",""))%>%
+  ggplot(aes(x=(Variables),y=Importance,fill=topcolor))+
+  geom_bar(stat="identity", color = "white") +
+  labs(x = "Amino acid position",y="Mean decrease accuracy")+
+  guides(fill=F)+
+  theme_classic()+
+  #scale_x_continuous(name="Amino acid position", limits=c(0, 96),breaks=seq(5,95,5))+
+  scale_x_continuous(name="Amino acid position", limits=c(0, 96), breaks=seq(2,92,5), labels=seq(295,385,5))+
+  coord_cartesian(xlim = c(4,91))+
+  scale_fill_manual(values=c("#555555", "#E69F00"))
+fig1B_csp_8
+
+
+saveRDS(fig1B_csp_8, "figures/robj/MDA_csp_epitopes.RDS")
+
+
+```
+
+AMA
+```{r,fig.width=8.75,fig.height=2.5,eval=IncludeRandomForest}
+fig1B_ama=rankImportance%>%
+  arrange(Variables)%>%
+  mutate(Rank=as.numeric(sub('.','',rankImportance$Rank)))%>%
+  mutate(topcolor = if_else(Rank < 11 ,"top10",""))%>%
+  ggplot(aes(x=(Variables),y=Importance,fill=topcolor))+
+  geom_bar(stat="identity", color = "white") +
+  labs(x = "Amino acid position",y="Mean decrease accuracy")+
+  guides(fill=F)+
+  theme_classic()+
+  #scale_x_continuous(name="Amino acid position", limits=c(0, 96),breaks=seq(5,95,5))+
+  scale_x_continuous(name="Amino acid position", limits=c(0, 100),breaks=seq(2,97,5),labels=seq(155,250,5))+
+  coord_cartesian(xlim = c(4,95))+
+  scale_fill_manual(values=c("#555555", "#E69F00"))
+fig1B_ama
+
+
+saveRDS(fig1B_ama, "figures/robj/MDA_ama_topten.RDS")
+
+
+#highlighting epitope
+
+fig1B_ama_4=rankImportance%>%
+  arrange(Variables)%>%
+  mutate(Rank=as.numeric(sub('.','',rankImportance$Rank)))%>%
+  mutate(topcolor = if_else(Variables %in% c(44,47,48,53), "epitope",""))%>%
+  ggplot(aes(x=(Variables),y=Importance,fill=topcolor))+
+  geom_bar(stat="identity", color = "white") +
+  labs(x = "Amino acid position",y="Mean decrease accuracy")+
+  guides(fill=F)+
+  theme_classic()+
+  scale_y_continuous(limits=c(0, 100))+
+  scale_x_continuous(name="Amino acid position", limits=c(0, 100),breaks=seq(2,97,5),labels=seq(155,250,5))+
+  coord_cartesian(xlim = c(4,95))+
+  scale_fill_manual(values=c("#555555", "#E69F00"))
+fig1B_ama_4
+
+saveRDS(fig1B_ama_4, "figures/robj/MDA_ama_top4.RDS")
+
+```
+
+Random forest including only the top 10 most important amino acid positions
+```{r, warning=F,message=F,fig.width=3,fig.height=3,eval=IncludeRandomForest}
+topten<-c(aatop$label,"HType")
+
+set.seed(12345)
+fittoptenaa <- randomForest(HType~.,
+                    data=MergHaploAA[names(MergHaploAA) %in% topten ],
+                    mtry=7,
+                    importance=TRUE,
+                    na.action=na.omit,
+                    ntree=2000)
+cat("OOB error rate",tail(fittoptenaa$err.rate[,1],n=1))
+#fig1d=as.data.frame(fittoptenaa$err.rate[,1])%>%
+#  mutate(number=row_number())%>%
+#  ggplot(aes(x=number,y=fittoptenaa$err.rate[,1]))+geom_line()+ylab("Out of bag error rate")+xlab("Number of trees")+labs(title="Top ten variant AA positions")+theme_bw()+coord_cartesian(ylim=c(0,0.20))
+```
+
+# Fig1C
+OOB error rate for RF models
+```{r,fig.width=5,fig.height=3,dpi=300,eval=IncludeRandomForest}
+#dataframe of error rate of RF models
+AllAA<-as.data.frame(fitAllaa$err.rate[,1])%>%
+  mutate(number=row_number())
+topten<-as.data.frame(fittoptenaa$err.rate[,1])%>%
+  mutate(number=row_number())
+
+#figure plotting OOB error rate for the RF models
+fig1c=AllAA%>%
+  left_join(topten,by="number")%>%
+  rename(Topten=3)%>%
+  rename(All_AA=1)%>%
+  pivot_longer(cols=c(All_AA,Topten),values_to="OOB_error", names_to="Aminoacids")%>%
+  ggplot(aes(x=number,y=OOB_error,color=Aminoacids))+
+  geom_line()+ylab("Out of bag error rate")+
+  xlab("Number of trees")+
+  labs(title="Random forest classification")+
+  theme_bw()+
+  coord_cartesian(xlim=c(0,2000),ylim=c(0,0.2))+
+  scale_color_manual(values=c("#555555", "#E69F00"),
+                     labels = c("All", "Top ten"),
+                     name="AA positions")+
+  theme(legend.position = "bottom")
+fig1c
+```
+
+# Combine figures
+```{r}
+RF_fig_csp <- ggarrange(ggarrange(fig1_csp,
+          fig1B_csp,
+          ncol = 1,
+          labels = c("A", "B"),
+          label.y = 1.02),
+          ggarrange(NULL,
+                    fig1c,
+                    NULL,
+                    ncol = 1,
+                    heights = c(0.2,1,0.2),
+                    labels = c("", "C", "")),
+          nrow = 1,
+          widths = c(3,1))
+
+saveRDS(RF_fig_csp, "figures/robj/RF_fig_csp.RDS")
+ggsave(plot = RF_fig_csp, "figures/RF_fig_csp.png", width = 12, height = 5)
+
+
+RF_fig_ama <- ggarrange(ggarrange(fig1_ama,
+          fig1B_ama,
+          ncol = 1,
+          labels = c("D", "E"),
+          label.y = 1.02),
+          ggarrange(NULL,
+                    fig1c,
+                    NULL,
+                    ncol = 1,
+                    heights = c(0.2,1,0.2),
+                    labels = c("", "F", "")),
+          nrow = 1,
+          widths = c(3,1))
+
+saveRDS(RF_fig_ama, "figures/robj/RF_fig_ama.RDS")
+ggsave(plot = RF_fig_ama, "figures/RF_fig_ama.png", width = 12, height = 5)
+
+
+RF_fig_csp_no_OOB <- ggarrange(fig1_csp,
+          fig1B_csp_8,
+          ncol = 1,
+          label.y = 1.02)
+
+saveRDS(RF_fig_csp_no_OOB, "figures/robj/RF_fig_csp_noOOB_8.RDS")
+
+
+
+RF_fig_ama_no_OOB <- ggarrange(fig1_ama,
+          fig1B_ama,
+          ncol = 1,
+          label.y = 1.02)
+
+saveRDS(RF_fig_ama_no_OOB, "figures/robj/RF_fig_ama_noOOB_10.RDS")
+
+
+```
+
+
+# Combining CSP and AMA
+```{r}
+
+#With top 10
+
+RF_fig_csp <- readRDS("figures/robj/RF_fig_csp.RDS")
+RF_fig_ama <- readRDS("figures/robj/RF_fig_ama.RDS")
+
+RF_fig <- ggarrange(RF_fig_csp,
+                    RF_fig_ama,
+                    ncol = 1)
+
+ggsave(plot = RF_fig, "figures/RF_fig.png", width = 12, height = 10)
+
+
+#With epitope positions
+RF_fig_csp_8 <- readRDS("figures/robj/RF_fig_csp_8.RDS")
+RF_fig_ama_4 <- readRDS("figures/robj/RF_fig_ama_top4.RDS")
+
+RF_fig_epitopes <- ggarrange(RF_fig_csp_8,
+                    RF_fig_ama_4,
+                    ncol = 1)
+
+ggsave(plot = RF_fig_epitopes, "figures/RF_fig_epitopes.png", width = 12, height = 10)
+
+
+```
+
+
+#Combining CSP and AMA no OOB
+```{r}
+#top10
+
+csp_seqlogo <- readRDS("figures/robj/csp_seqlogo_black.RDS")
+ama_seqlogo <-readRDS("figures/robj/ama_seqlogo_black.RDS")
+
+csp_MDA_topten <- readRDS("figures/robj/MDA_csp_topten.RDS")
+ama_MDA_topten <- readRDS("figures/robj/MDA_ama_topten.RDS")
+
+
+noOOB <- ggarrange(csp_seqlogo+
+                     theme(axis.title.x = element_blank()),
+                   csp_MDA_topten+
+                     labs(y = "MDA"),
+                   ama_seqlogo+
+                     theme(axis.title.x = element_blank()),
+                   ama_MDA_topten+
+                     labs(y = "MDA"),
+                   ncol = 1,
+                   heights = c(1,0.6,1,0.6),
+                   labels = c("A", "B", "C", "D"),
+                   label.y = 1.04)
+
+ggsave(plot = noOOB, "figures/noOOB_top10.png", width = 10, height = 6)
+
+# epitopes
+csp_MDA_epitopes <- readRDS("figures/robj/MDA_csp_epitopes.RDS")
+ama_MDA_epitopes <- readRDS("figures/robj/MDA_ama_top4.RDS")
+
+noOOB_epitopes <- ggarrange(csp_seqlogo+
+                     theme(axis.title.x = element_blank()),
+                   csp_MDA_epitopes+
+                     labs(y = "MDA"),
+                   ama_seqlogo+
+                     theme(axis.title.x = element_blank()),
+                   ama_MDA_epitopes+
+                     labs(y = "MDA"),
+                   ncol = 1,
+                   heights = c(1,0.6,1,0.6),
+                   labels = c("A", "B", "C", "D"),
+                   label.y = 1.04)
+
+ggsave(plot = noOOB_epitopes, "figures/noOOB_epitopes.png", width = 10, height = 6)
+
+
+
+```
+

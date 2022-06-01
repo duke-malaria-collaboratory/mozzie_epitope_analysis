@@ -1,0 +1,49 @@
+person,label,date,symptomatic_status,x,xend
+1,PCR,6/1/2017,asymptomatic infection,,
+1,PCR,7/1/2017,asymptomatic infection,,
+1,PCR,8/1/2017,asymptomatic infection,,
+1,PCR,9/1/2017,asymptomatic infection,,
+1,PCR,10/1/2017,asymptomatic infection,6/1/2017,10/1/2017
+1,Epitope 1,6/1/2017,asymptomatic infection,,
+1,Epitope 1,7/1/2017,asymptomatic infection,,
+1,Epitope 1,8/1/2017,asymptomatic infection,,
+1,Epitope 1,9/1/2017,asymptomatic infection,6/1/2017,9/1/2017
+1,Epitope 2,9/1/2017,asymptomatic infection,,
+1,Epitope 2,10/1/2017,asymptomatic infection,9/1/2017,10/1/2017
+1,PCR,6/28/2018,asymptomatic infection,,
+1,PCR,7/25/2018,symptomatic infection,6/28/2018,7/25/2018
+1,Epitope 2,6/28/2018,asymptomatic infection,,
+1,Epitope 2,7/25/2018,symptomatic infection,6/28/2018,7/25/2018
+2,PCR,11/1/2017,asymptomatic infection,,
+2,PCR,12/1/2017,asymptomatic infection,,
+2,PCR,1/1/2018,asymptomatic infection,,
+2,PCR,2/1/2018,asymptomatic infection,,
+2,PCR,3/1/2018,asymptomatic infection,,
+2,PCR,4/1/2018,asymptomatic infection,,
+2,PCR,5/1/2018,asymptomatic infection,11/1/2017,5/1/2018
+2,Epitope 1,1/1/2018,asymptomatic infection,,
+2,Epitope 1,2/1/2018,asymptomatic infection,,
+2,Epitope 1,3/1/2018,asymptomatic infection,,
+2,Epitope 1,4/1/2018,asymptomatic infection,,
+2,Epitope 1,5/1/2018,asymptomatic infection,1/1/2018,5/1/2018
+2,Epitope 3,11/1/2017,asymptomatic infection,,
+2,Epitope 3,12/1/2017,asymptomatic infection,,
+2,Epitope 3,1/1/2018,asymptomatic infection,11/1/2017,1/1/2018
+2,Epitope 3,4/1/2018,asymptomatic infection,,
+2,Epitope 3,5/1/2018,asymptomatic infection,4/1/2018,5/1/2018
+2,Epitope 4,2/1/2018,asymptomatic infection,2/1/2018,2/1/2018
+3,PCR,6/2/2017,asymptomatic infection,,
+3,PCR,7/1/2017,asymptomatic infection,,
+3,PCR,8/1/2017,symptomatic infection,6/2/2017,8/1/2017
+3,Epitope 2,6/2/2017,asymptomatic infection,6/2/2017,6/2/2017
+3,Epitope 4,8/1/2017,symptomatic infection,8/1/2017,8/1/2017
+3,Epitope 5,6/2/2017,asymptomatic infection,,
+3,Epitope 5,7/1/2017,asymptomatic infection,,
+3,Epitope 5,8/1/2017,symptomatic infection,6/2/2017,8/1/2017
+3,PCR,3/29/2018,asymptomatic infection,,
+3,PCR,4/28/2018,asymptomatic infection,,
+3,PCR,6/1/2018,asymptomatic infection,3/29/2018,6/1/2018
+3,Epitope 2,3/29/2018,asymptomatic infection,,
+3,Epitope 2,4/28/2018,asymptomatic infection,3/29/2018,4/28/2018
+3,Epitope 4,4/28/2018,asymptomatic infection,,
+3,Epitope 4,6/1/2018,asymptomatic infection,4/28/2018,6/1/2018

@@ -1,0 +1,181 @@
+---
+title: "Classification figure"
+author: "Christine Markwalter"
+date: "4/12/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggpmisc)
+library(lubridate)
+library(ggalt)
+
+```
+
+
+<!-- # Load data -->
+<!-- ```{r} -->
+<!-- all_classified <- readRDS("data/processed/all_infections_classified.RDS") -->
+<!-- cd4_classified <- readRDS("data/processed/cd4_allinfections_classified.RDS") -->
+<!-- ``` -->
+
+
+<!-- # Filter to a few examples -->
+<!-- ```{r} -->
+
+<!-- eg_classified <- all_classified %>% -->
+<!--   filter(unq_memID %in% c("M15_5", "M12_1", "K12_2", "M09_2")) -->
+
+<!-- eg_cd4 <- cd4_classified %>% -->
+<!--   filter(unq_memID %in% c("M15_5", "M12_1", "K12_2", "M09_2")) -->
+
+<!-- ``` -->
+
+
+
+<!-- # Trying with just basic data -->
+<!-- ```{r} -->
+
+<!-- overall_eg <- eg_classified %>% -->
+<!--   arrange(unq_memID, dmy(sample_id_date)) %>% -->
+<!--   filter(StartMiddleEnd %in% c("start", "end", "start+end")) %>% -->
+<!--   mutate(x = ifelse(StartMiddleEnd == "end", lag(sample_id_date,1),  -->
+<!--                     ifelse(StartMiddleEnd == "start+end", sample_id_date, NA)), -->
+<!--          xend = ifelse(StartMiddleEnd %in% c("start+end", "end"), sample_id_date, NA)) %>% -->
+<!--   filter(StartMiddleEnd %in% c("start+end", "end")) %>% -->
+<!--   select(unq_memID, sample_id_date, symptomatic_status, StartMiddleEnd, x, xend) %>% -->
+<!--   mutate(AAs = "A", mem_AA = paste0(unq_memID, "-", AAs), label = "PCR-positive") -->
+
+
+
+<!-- overall_eg %>% ggplot(aes(y = unq_memID))+ -->
+<!--   geom_dumbbell(aes(x = dmy(x), xend = dmy(xend)),size=3, color="#e3e2e1", -->
+<!--                 colour_x = "#e3e2e1") + -->
+<!--   geom_point(aes(x = dmy(xend), color = symptomatic_status), size = 4) + -->
+<!--   scale_color_manual(values = c("#e3e2e1", "darkred"))+ -->
+<!--   theme_minimal() -->
+<!-- ``` -->
+
+<!-- # With epitope types -->
+<!-- ```{r, warning=FALSE, message=FALSE} -->
+<!-- epitope_eg <- eg_cd4 %>% -->
+<!--   arrange(dmy(sample_id_date)) %>% -->
+<!--   select(unq_memID, sample_id_date, AAs, samplenumber, toNext, symptomatic_status) %>% -->
+<!--   group_by(unq_memID, AAs) %>% #use ToNext to define start, start+end, and end -->
+<!--   mutate(StartMiddleEnd = ifelse(is.na(toNext), "start+end", -->
+<!--                                  ifelse(toNext == "uncleared" & samplenumber == min(samplenumber), "start", -->
+<!--                                         ifelse(toNext == "uncleared" & lag(toNext, 1) == "uncleared", "middle", -->
+<!--                                         ifelse(toNext == "uncleared" & as.numeric(lag(toNext,1))> 0, "start", -->
+<!--                                                ifelse(as.numeric(toNext) > 0 & samplenumber == min(samplenumber), "start+end", -->
+<!--                                                       ifelse(as.numeric(toNext) > 0 & lag(toNext,1) != "uncleared", "start+end", -->
+<!--                                                              ifelse(as.numeric(toNext) > 0 & lag(toNext,1) == "uncleared", "end",NA)))))))) %>% -->
+<!--   filter(StartMiddleEnd %in% c("start", "end", "start+end")) %>% -->
+<!--   mutate(x = ifelse(StartMiddleEnd == "end", lag(sample_id_date,1),  -->
+<!--                     ifelse(StartMiddleEnd == "start+end", sample_id_date, NA)), -->
+<!--          xend = ifelse(StartMiddleEnd %in% c("start+end", "end"), sample_id_date, NA)) %>% -->
+<!--   filter(StartMiddleEnd %in% c("start+end", "end")) %>% -->
+<!--   mutate(mem_AA = paste0(unq_memID, "-", AAs)) %>% -->
+<!--   select(unq_memID, sample_id_date, symptomatic_status, StartMiddleEnd, x, xend, AAs, mem_AA) %>% -->
+<!--   mutate(label = AAs) -->
+
+
+<!-- summary_eg <- overall_eg %>% -->
+<!--   rbind(epitope_eg) %>% -->
+<!--   filter(mem_AA %in% c("M15_5-KKTQ", "M15_5-KKTK", "M15_5-KKIQ", "M15_5-A",  -->
+<!-- "M12_1-QKTK", "M12_1-A", "M09_2-QKTQ", "M09_2-QKTK", "M09_2-KKIQ", "M09_2-A", "K12_2-QKTQ", "K12_2-QKKQ", "K12_2-KKIQ", "K12_2-A")) %>% -->
+<!--   arrange(mem_AA)  -->
+
+<!-- summary_eg$label <- factor(summary_eg$label, levels = c("QKTQ", "QKTK", "QKKQ", "KKTQ", "KKTK", "KKIQ", "PCR-positive"), labels = c("Epitope 6", "Epitope 5", "Epitope 4", "Epitope 3", "Epitope 2", "Epitope 1", "PCR-positive")) -->
+
+<!-- summary_eg$unq_memID <- factor(summary_eg$unq_memID, levels = c("K12_2", "M09_2", "M12_1", "M15_5"), labels = c("Person 1", "Person 2", "Person 3", "Person 4")) -->
+
+
+<!-- summary_fig <- summary_eg %>%  -->
+<!--   ggplot(aes(y = label))+ -->
+<!--   geom_dumbbell(aes(x = dmy(x), xend = dmy(xend)),size=2, size_x = 4, color="#87B4C0", -->
+<!--                 colour_x = "#87B4C0") + -->
+<!--   geom_point(aes(x = dmy(xend), color = symptomatic_status), size = 4) + -->
+<!--   scale_color_manual(values = c("#87B4C0", "#CE5B3B"), name = "")+ -->
+<!--   facet_grid(unq_memID~., scales = "free") + -->
+<!--   labs(y = "")+ -->
+<!--   theme_bw() + -->
+<!--   theme(legend.position = "bottom", axis.title.x = element_blank()) -->
+
+
+<!-- summary_fig -->
+
+<!-- ``` -->
+
+# Mock data
+```{r}
+mock_eg <- read_csv("data/processed/mock_classification_fig.csv")
+
+mock_eg <- mock_eg %>%
+  mutate(type = ifelse(label == "PCR", "PCR", "Epitope"), timing = ifelse(!is.na(xend), "end", "not end"), label = ifelse(label == "PCR", "**PCR**", label))
+
+mock_eg$label <- factor(mock_eg$label, levels = c("Epitope 5", "Epitope 4", "Epitope 3", "Epitope 2", "Epitope 1", "**PCR**"))
+mock_eg$symptomatic_status <- factor(mock_eg$symptomatic_status, levels = c("asymptomatic infection", "symptomatic infection"), labels = c("Asymptomatic infection", "Symptomatic infection"))
+mock_eg$person <- factor(mock_eg$person, levels = c(1,2,3), labels = c("Person 1", "Person 2", "Person 3"))
+
+mock_eg %>% 
+  ggplot(aes(y = label))+
+  geom_dumbbell(aes(x = mdy(x), xend = mdy(xend)),size=2, size_x = 0, size_xend = 0, color="#87B4C0", alpha = 0.3) +
+  geom_point(aes(x = mdy(date), color = symptomatic_status, alpha = timing), size = 4) +
+  scale_color_manual(values = c("#87B4C0", "#CE5B3B"), name = "")+
+  scale_alpha_manual(values = c(1,0.3), guide = "none") +
+  facet_grid(person~., scales = "free") +
+  labs(y = "")+
+  theme_bw() +
+  theme(legend.position = "bottom", axis.title.x = element_blank())
+
+
+# Now I need to figure out how to add a table to the right with the time to reinfections
+TTR <- mock_eg %>%
+  filter(!is.na(x)) %>%
+  arrange(mdy(date)) %>%
+  group_by(person, label) %>%
+  mutate(TTR = mdy(lead(x,1)) - mdy(xend)) %>%
+  mutate(TimeToReinfection = ifelse(!is.na(TTR), as.numeric(TTR),
+                                    ifelse(is.na(TTR), "Censor", NA))) %>%
+  ungroup() %>%
+  group_by(person, label) %>%
+  summarise(TTR_summary = toString(TimeToReinfection))
+
+mock_eg <- mock_eg %>%
+  left_join(TTR) %>%
+  mutate(TTR_summary = ifelse(!is.na(x), TTR_summary, NA)) %>%
+  ungroup() %>%
+  group_by(person, label, is.na(x)) %>%
+  mutate(TTR = ifelse(is.na(x), NA,
+                              ifelse(mdy(x) != max(mdy(x)), NA,
+                                     ifelse(mdy(x) == max(mdy(x)), TTR_summary, "99"))))
+
+
+classification_plot <- mock_eg %>% 
+  ggplot(aes(y = label))+
+  geom_hline(yintercept = "**PCR**", color = "darkgrey") +
+  geom_dumbbell(aes(x = mdy(x), xend = mdy(xend)),size=2, size_x = 0, size_xend = 0, color="#87B4C0", alpha = 0.3) +
+  geom_point(aes(x = mdy(date), color = symptomatic_status, alpha = timing), size = 4) +
+  scale_color_manual(values = c("#87B4C0", "#CE5B3B"), name = NULL)+
+  scale_alpha_manual(values = c(1,0.3), guide = "none") +
+  geom_rect(aes(xmin = ymd("2018-09-01"), xmax = ymd("2018-12-01"), ymin = -Inf, ymax = Inf), fill = "lightgrey")+
+  geom_text(aes(label = TTR, x = ymd("2018-10-15")), alpha = 1, size = 3)+
+  labs(title = "Days to reinfection") +
+  #geom_rect(aes(fill = type), xmin = dmy("2017-05-01"), xmax = dmy("2018-12-01"), ymin = -Inf, ymax = Inf, alpha = 0.1) +
+  #scale_fill_manual(values = c("grey", "white")) +
+  scale_x_date(limits = c(ymd("2017-04-25"), ymd("2018-12-01")), expand = c(0,0), date_breaks = "100 days", minor_breaks = NULL, date_labels = c("0", "100", "200","300", "400", " "))+
+  facet_grid(person~., scales = "free") +
+  labs(y = "", x = "Time (Days)")+
+  theme_bw() +
+  theme(legend.position = "bottom", plot.title = element_text(size = 10, hjust = 1.015), strip.background = element_rect(fill = "white"),  axis.ticks.x = element_blank(), axis.ticks.y = element_blank(), axis.text.y = ggtext::element_markdown(), panel.grid.major.y = element_blank())
+
+
+classification_plot
+
+ggsave(plot = classification_plot, "figures/mock_classification_fig_a.png", width = 8, height = 4)
+
+```
+
+

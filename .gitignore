@@ -3,3 +3,4 @@
 .RData
 .Ruserdata
 data/original/*
+code/*.html
