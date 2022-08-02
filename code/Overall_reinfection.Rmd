@@ -319,9 +319,10 @@ ggplot(all_infections, aes(x = ymd(sample_id_date), y = unq_memID))+
 ```
 
 
-#Updated 2/23/2022 - Erica Zeno
+# Remove events w/time to reinfection < 60 days
+Updated 2/23/2022 - Erica Zeno
 ```{r}
-#Removing infections in the first 60 days
+#Removing reinfections in the first 60 days after an episode
 classified_infections <- classified_infections %>% 
   mutate(cutoff_60=ifelse(Days>60,1,0))
 
@@ -424,7 +425,27 @@ ggsave(plot = figF_60, "figures/overall_reinfection.png", width = 8, height = 5)
 
 ```
 
-# Checking the distribution of variables before and after 60 days - EZ March 2022 
+# Table 1
+Age, sex, transmission season, parasite density
+```{r}
+library(gtsummary)
+
+classified_infections_60 %>%
+  select(ageCat, gender, mosquito_prev_2weeks_cat, pfr364Q_std_combined, symptomatic_status) %>%
+  tbl_summary(by = symptomatic_status, digits = all_continuous() ~ 2) %>%
+  add_p() %>%
+  add_overall()
+```
+
+No of subsequent infections
+```{r}
+
+```
+
+
+
+# Table S1
+Checking the distribution of variables before and after 60 days - EZ March 2022 
 ```{r, warning=F,message=F}
 popcheck_overall<-classified_infections
 
