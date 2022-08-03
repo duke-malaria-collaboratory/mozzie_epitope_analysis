@@ -467,6 +467,31 @@ classified_infections_60 %>%
 ```
 
 **MOI and read coverage**
+Will need to import deep sequencing data for this one and merge.
+```{r}
+csp <- read_csv("data/original/spat21_csp_summarized_haplotype_list_31DEC2019.csv")
+ama <- read_csv("data/original/spat21_ama_summarized_haplotype_list_31DEC2019.csv")
+
+classified_infections_60 %>%
+  left_join(csp, by = "sample_name_dbs") %>%
+  rename(csp_moi = haplotype_number,
+         csp_reads = haplotype_reads,
+         csp_haps = haplotype_list) %>%
+  left_join(ama, by = "sample_name_dbs") %>%
+  rename(ama_moi = haplotype_number,
+         ama_reads = haplotype_reads,
+         ama_haps = haplotype_list) %>%
+  mutate(moi = pmax(csp_moi, ama_moi, na.rm = TRUE),
+         moi_cat = ifelse(moi < 2, "1",
+                          ifelse(moi > 1 & moi < 6, "2-5",
+                                 ifelse(moi > 5, "> 5", NA)))) %>%
+  select(symptomatic_status, moi_cat, csp_reads, ama_reads) %>%
+  tbl_summary(by = symptomatic_status) %>%
+  add_p() %>%
+  add_overall()
+
+```
+
 
 
 # Table S1
