@@ -437,11 +437,36 @@ classified_infections_60 %>%
   add_overall()
 ```
 
-No of subsequent infections
+**No of subsequent episodes**
 ```{r}
+classified_infections_60 %>%
+  group_by(unq_memID) %>%
+  mutate(total_episodes = n()) %>%
+  arrange(ymd(sample_id_date)) %>%
+  mutate(episode_no = row_number(unq_memID), subsequent_episodes = total_episodes - episode_no) %>%
+  ungroup() %>%
+  select(symptomatic_status, subsequent_episodes) %>%
+  tbl_summary(by = symptomatic_status, 
+              digits = all_continuous() ~ 2, 
+              type = everything() ~ "continuous") %>%
+  add_p() %>%
+  add_overall()
+  
 
+classified_infections_60 %>%
+  group_by(unq_memID) %>%
+  mutate(total_episodes = n()) %>%
+  arrange(ymd(sample_id_date)) %>%
+  mutate(episode_no = row_number(unq_memID), subsequent_episodes = total_episodes - episode_no) %>%
+  ungroup() %>%
+  select(symptomatic_status, subsequent_episodes) %>%
+  tbl_summary(by = symptomatic_status) %>%
+  add_p() #%>%
+  #add_overall()
+  
 ```
 
+**MOI and read coverage**
 
 
 # Table S1
