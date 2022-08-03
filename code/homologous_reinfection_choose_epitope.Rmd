@@ -539,6 +539,7 @@ epitope_props <- TimeToDataAdvEpitope %>%
   mutate(n_events = n()) %>%
   group_by(cutoff_60, AAs) %>%
   summarise(n_AAs = n(), prop_AAs = n_AAs/n_events) %>%
+  ungroup() %>%
   complete(cutoff_60, AAs, fill = list(n_AAs = 0, prop_AAs = 0)) %>%
   unique()
 
@@ -1083,7 +1084,7 @@ Run the coxme model on permuted datasets to get an estimate of the null aHR
 random_coxme <- lapply(1:1000, function(x){
   temp <- perm_data[[x]] %>%
     add_count(AAs)%>%
-    mutate(freq = n/nrow(perm_data[[x]]*100))%>%
+    mutate(freq = n/nrow(perm_data[[x]])*100) %>%
     mutate(FrequencyCat=case_when(ntile(freq, 100) > 50~paste0("top"),
                                 ntile(freq, 100) < 50~paste0("bottom")))%>%
       mutate(FrequencyCat=factor(FrequencyCat,levels=c("bottom","top")))
