@@ -43,9 +43,9 @@ library(ggpubr)
 Define current epitope CSP/AMA and AA positions of interest (as determined from the RF models). Need to to this before knitting!
 ```{r,echo=T}
 #CSP CD4 T-cell (Th2R)
-# CurrentEpitopeName<-("CD4")
-# EpitopeCurrent<-c("x25","x28","x29","x31")
-# AMA <- FALSE
+CurrentEpitopeName<-("CD4")
+EpitopeCurrent<-c("x25","x28","x29","x31")
+AMA <- FALSE
 
 
 #CSP CD8 T-cell (Th3R)
@@ -64,9 +64,9 @@ Define current epitope CSP/AMA and AA positions of interest (as determined from 
 # AMA <- TRUE
 
 # #AMA c1L
-CurrentEpitopeName<-("c1L")
-EpitopeCurrent<-c("x44","x47","x48","x53")
-AMA <- TRUE
+# CurrentEpitopeName<-("c1L")
+# EpitopeCurrent<-c("x44","x47","x48","x53")
+# AMA <- TRUE
 
 ```
 
@@ -493,7 +493,7 @@ saveRDS(homol_fig_2, paste0("figures/robj/", CurrentEpitopeName,"_homol_fig_cuto
 TimeToDataAdvEpitope_60 <- TimeToDataAdvEpitope_60 %>%
   ungroup()%>%
   add_count(AAs)%>%
-  mutate(freq = n)%>%
+  mutate(freq = n/nrow(TimeToDataAdvEpitope_60)*100)%>%
   mutate(FrequencyCat=case_when(ntile(freq, 100) > 50~paste0("top"),
                               ntile(freq, 100) < 50~paste0("bottom")))%>%
 mutate(FrequencyCat=factor(FrequencyCat,levels=c("bottom","top")))
@@ -539,6 +539,7 @@ epitope_props <- TimeToDataAdvEpitope %>%
   mutate(n_events = n()) %>%
   group_by(cutoff_60, AAs) %>%
   summarise(n_AAs = n(), prop_AAs = n_AAs/n_events) %>%
+  ungroup() %>%
   complete(cutoff_60, AAs, fill = list(n_AAs = 0, prop_AAs = 0)) %>%
   unique()
 
@@ -1083,7 +1084,7 @@ Run the coxme model on permuted datasets to get an estimate of the null aHR
 random_coxme <- lapply(1:1000, function(x){
   temp <- perm_data[[x]] %>%
     add_count(AAs)%>%
-    mutate(freq = n)%>%
+    mutate(freq = n/nrow(perm_data[[x]])*100) %>%
     mutate(FrequencyCat=case_when(ntile(freq, 100) > 50~paste0("top"),
                                 ntile(freq, 100) < 50~paste0("bottom")))%>%
       mutate(FrequencyCat=factor(FrequencyCat,levels=c("bottom","top")))
