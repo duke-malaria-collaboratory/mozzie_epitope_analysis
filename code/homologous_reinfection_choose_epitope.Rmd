@@ -795,6 +795,154 @@ saveRDS(effect_mod_summary_fig, paste0("figures/robj/", CurrentEpitopeName,"_eff
 
 ```
 
+## Age-stratified hazard ratios
+We want to know whether there is effect measure modification by age group.
+First let's look at the number of people in each age group
+```{r}
+TimeToDataAdvEpitope_60 %>%
+  filter(!is.na(ageCat)) %>%
+  ggplot() +
+  aes(x = ageCat) +
+  geom_bar() +
+  theme_bw()
+```
+
+Let's make a figure analagous to the figure for type prevalence, with ageCat on the x axis, bars showing the number of episodes on the right y axis and risk of homologous reinfection for Asx and Sx on the left y axis.
+```{r}
+Age1ySummary <- summary(survfit(Surv(Days,EventCensored)~ageCat + symptomatic_status,data=TimeToDataAdvEpitope_60),times=365.25,extend=TRUE)
+
+Age1ySummary_df <- as_tibble(as.data.frame(Age1ySummary$table) %>% rownames_to_column()) %>%
+  separate(rowname, into = c("Age", "symptomatic_status"), sep = ", ") %>%
+  mutate(Age = str_trim(gsub(".*=", "", Age)), symptomatic_status = str_trim(gsub(".*=", "", symptomatic_status))) %>%
+  bind_cols(surv = Age1ySummary$surv, survse = Age1ySummary$std.err) 
+
+
+age_risk_fig <- Age1ySummary_df %>%
+    mutate(Age = factor(Age, levels = c("<5", "5-15", ">15")), symptomatic_status = factor(symptomatic_status, levels = c("symptomatic infection", "asymptomatic infection"), labels = c("Sx", "Asx")))%>%
+    mutate(risk = 1-surv, lower = risk - 1.96*survse, upper = risk + 1.96*survse) %>%
+    ggplot(aes(x = Age)) +
+    geom_pointrange(aes(y = risk, ymin = risk-1.96*survse, ymax = risk+1.96*survse, fill = symptomatic_status), position=position_dodge(width=0.3)) +
+    geom_bar(aes(y = records/1000), alpha = 0.2, stat = "identity") +
+    scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1),sec.axis = sec_axis(~.*1000, name = "Number of episodes",breaks=c(200,400,600,800,1000))) +
+    geom_point(aes(y=risk,fill=symptomatic_status),shape=21,position=position_dodge(width=0.3), size=3)+
+    scale_fill_manual(values = rev(strat_colors)) +
+    labs(color = "Symptomaticity", fill = "Symptomaticity", y = "1-year risk of homologous reinfection", x = "Age") +
+    theme_classic2() +
+    theme(legend.position = "top", strip.background = element_rect(size = 0.5))
+
+
+age_risk_fig
+
+saveRDS(age_risk_fig, paste0("figures/robj/", CurrentEpitopeName,"_age_risk_fig.RDS"))
+
+
+
+```
+
+Now we'll look to see if there is effect measure modification...
+```{r}
+
+TimeToDataAdvEpitope_60$ageCat <- factor(TimeToDataAdvEpitope_60$ageCat, levels = c("<5", "5-15", ">15"))
+
+#Checking quant variable. Crosstab with symptomatic status:
+age_table <- xtabs(~symptomatic_status+ageCat, data=TimeToDataAdvEpitope_60)
+ftable(age_table)
+summary(age_table)
+
+#First fit crude model. Note we have to do this again because 11 episodes are missing ageCat
+age_model_crude <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + (1|unq_memID), data = TimeToDataAdvEpitope_60 %>% filter(!is.na(ageCat)), ties = "efron")
+summary(age_model_crude)
+
+#Fit a crude with an interaction term 
+age_model_crude_int <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + symptomatic_bin*ageCat + (1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron")
+summary(age_model_crude_int)
+
+
+#Likelihood ratio test
+anova(age_model_crude, age_model_crude_int)
+
+
+#Fit the full model 
+age_model <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + freq + freq+mosquito_prev_2weeks_cat+(1|unq_memID), data = TimeToDataAdvEpitope_60 %>% filter(!is.na(ageCat)), ties = "efron")
+
+#Fit a full model with an interaction term 
+age_model_full <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + freq + freq+mosquito_prev_2weeks_cat + symptomatic_bin*ageCat + (1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron")
+summary(age_model_full)
+
+
+#Likelihood ratio test
+anova(age_model, age_model_full)
+
+
+
+#Fit 3 stratified models for each prevalence category
+age_model_1 <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + freq + freq+mosquito_prev_2weeks_cat+(1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron", subset = ageCat=="<5")
+summary(age_model_1)
+exp(confint(age_model_1,method="Wald"))
+
+
+age_model_2 <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + freq + freq+mosquito_prev_2weeks_cat+(1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron", subset = ageCat=="5-15")
+summary(age_model_2)
+exp(confint(age_model_2,method="Wald"))
+
+
+age_model_3 <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + freq + freq+mosquito_prev_2weeks_cat+(1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron", subset = ageCat==">15")
+summary(age_model_3)
+exp(confint(age_model_3,method="Wald"))
+
+
+```
+
+
+Make a summary figure
+```{r}
+
+age_effect_meas_mod_summary <- data.frame(age_model_1$coefficients) %>% 
+  rownames_to_column(var = "variable") %>%
+  mutate(ageCat = "<5") %>%
+  rename("coeff" = "age_model_1.coefficients") %>%
+  left_join(data.frame(exp(confint(age_model_1,method="Wald"))) %>%
+              rownames_to_column(var = "variable") %>%
+              mutate(ageCat = "<5") %>%
+              rename("lower" = "X2.5..", "upper" = "X97.5..")) %>%
+  rbind(data.frame(age_model_2$coefficients) %>% 
+  rownames_to_column(var = "variable") %>%
+  mutate(ageCat = "5-15") %>%
+    rename("coeff" = "age_model_2.coefficients") %>%
+  left_join(data.frame(exp(confint(age_model_2,method="Wald"))) %>%
+              rownames_to_column(var = "variable") %>%
+              mutate(ageCat = "5-15") %>%
+              rename("lower" = "X2.5..", "upper" = "X97.5.."))) %>%
+    rbind(data.frame(age_model_3$coefficients) %>% 
+  rownames_to_column(var = "variable") %>%
+  mutate(ageCat = ">15") %>%
+    rename("coeff" = "age_model_3.coefficients") %>%
+  left_join(data.frame(exp(confint(age_model_3,method="Wald"))) %>%
+              rownames_to_column(var = "variable") %>%
+              mutate(ageCat = ">15") %>%
+              rename("lower" = "X2.5..", "upper" = "X97.5.."))) %>%
+  mutate(aHR = exp(coeff))
+
+age_effect_mod_summary_fig <- age_effect_meas_mod_summary %>%
+  filter(variable == "symptomatic_bin") %>%
+  ggplot() +
+  ggstance::geom_pointrangeh(aes(x = aHR, xmin = lower, xmax = upper, y = factor(ageCat, levels = c(">15", "5-15", "<5")))) +
+  geom_vline(xintercept = 1, linetype = "dashed") +
+  labs(y = "", x = "Symptomatic Adj. HR (95%)") +
+  scale_x_continuous(trans = "log10") +
+  theme_bw()
+
+age_effect_mod_summary_fig
+
+saveRDS(age_effect_mod_summary_fig, paste0("figures/robj/", CurrentEpitopeName,"age_effect_mod.RDS"))
+
+
+
+```
+
+
+
+
 
 
 # Random reinfection
