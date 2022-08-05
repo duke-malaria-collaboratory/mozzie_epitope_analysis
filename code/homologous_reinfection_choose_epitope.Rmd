@@ -1137,6 +1137,230 @@ homol_random_logrank_stats %>%
 
 
 
+## Homologous v random Asx/Sx
+We want to see if there is a difference between homolgous and random reinfection after symptomatic exposure separately for Asx and Sx index episodes
+```{r}
+# First get the homologous survival curves separately for Asx and Sx
+
+## Asx
+surv_data_homol_Asx <- survfit(Surv(Days,EventCensored)~1,data=TimeToDataAdvEpitope_60 %>% filter(symptomatic_status == "asymptomatic infection"))
+
+surv_data_homol_Asx
+summary(surv_data_homol_Asx, times = 365.25)
+
+surv_homol_Asx <- fortify(surv_data_homol_Asx)
+
+## Sx
+surv_data_homol_Sx <- survfit(Surv(Days,EventCensored)~1,data=TimeToDataAdvEpitope_60 %>% filter(symptomatic_status == "symptomatic infection"))
+
+surv_data_homol_Sx
+summary(surv_data_homol_Sx, times = 365.25)
+
+surv_homol_Sx <- fortify(surv_data_homol_Sx)
+
+
+# Now let's get the same curves for the permuted datasets and make some plots
+
+## Asx
+perm_surv_Asx <- lapply(1:1000, function(x){
+  survfit(Surv(Days,EventCensored)~1,data=perm_data[[x]] %>% filter(symptomatic_status == "asymptomatic infection")) %>%
+  fortify()
+}) %>%
+  bind_rows(.id = "perm")
+
+
+random_Asx_avg <- perm_surv_Asx %>%
+  group_by(time) %>%
+  summarise(med_surv = median(surv), mean_surv = mean(surv), min_surv = min(surv), max_surv = max(surv), lowerCI = median(lower), upperCI = median(upper))
+
+random_Asx_forfig <- random_Asx_avg %>%
+  arrange(time) %>%
+  mutate(time = lead(time, 1)) %>%
+  bind_rows(random_Asx_avg)
+
+
+surv_Asx_data_forfig <- surv_homol_Asx %>%
+  arrange(time) %>%
+  mutate(time = lead(time, 1)) %>%
+  bind_rows(surv_homol_Asx) %>%
+  rename(med_surv = surv, lowerCI = lower, upperCI = upper) %>%
+  select(time, med_surv, lowerCI, upperCI) %>%
+  mutate(dataset = "Homologous") %>%
+  bind_rows(random_Asx_forfig %>%
+          select(time, med_surv, lowerCI, upperCI) %>%
+          mutate(dataset = "Random"))
+
+
+homol_random_Asx_fig <- surv_Asx_data_forfig %>%
+  ggplot(aes(x = time, y = med_surv, color = dataset)) +
+  geom_line(aes(x = time, y = med_surv))+
+  geom_line(data = tibble(time = c(0,61,0,61), med_surv = c(1,1,1,1), dataset = c("Homologous","Homologous","Random","Random")))+
+  geom_ribbon(aes(x = time, y = med_surv, ymin = lowerCI, ymax = upperCI, fill = dataset), alpha = 0.3, color = NA)+
+  scale_color_grey(start = 0.6, end = 0.3) +
+  scale_fill_grey(start = 0.6, end = 0.3) +
+  labs(color = "", fill = "", y = "Median probability of survival without reinfection", x = "Time in days") +
+  scale_y_continuous(limits = c(0,1))+
+  theme_bw()
+
+homol_random_Asx_fig
+
+
+saveRDS(homol_random_Asx_fig, paste0("figures/robj/", CurrentEpitopeName,"_homolvrandom_survival_Asx.RDS"))
+
+
+
+## Sx
+
+perm_surv_Sx <- lapply(1:1000, function(x){
+  survfit(Surv(Days,EventCensored)~1,data=perm_data[[x]] %>% filter(symptomatic_status == "symptomatic infection")) %>%
+  fortify()
+}) %>%
+  bind_rows(.id = "perm")
+
+
+random_Sx_avg <- perm_surv_Sx %>%
+  group_by(time) %>%
+  summarise(med_surv = median(surv), mean_surv = mean(surv), min_surv = min(surv), max_surv = max(surv), lowerCI = median(lower), upperCI = median(upper))
+
+random_Sx_forfig <- random_Sx_avg %>%
+  arrange(time) %>%
+  mutate(time = lead(time, 1)) %>%
+  bind_rows(random_Sx_avg)
+
+
+surv_Sx_data_forfig <- surv_homol_Sx %>%
+  arrange(time) %>%
+  mutate(time = lead(time, 1)) %>%
+  bind_rows(surv_homol_Sx) %>%
+  rename(med_surv = surv, lowerCI = lower, upperCI = upper) %>%
+  select(time, med_surv, lowerCI, upperCI) %>%
+  mutate(dataset = "Homologous") %>%
+  bind_rows(random_Sx_forfig %>%
+          select(time, med_surv, lowerCI, upperCI) %>%
+          mutate(dataset = "Random"))
+
+
+homol_random_Sx_fig <- surv_Sx_data_forfig %>%
+  ggplot(aes(x = time, y = med_surv, color = dataset)) +
+  geom_line(aes(x = time, y = med_surv))+
+  geom_line(data = tibble(time = c(0,61,0,61), med_surv = c(1,1,1,1), dataset = c("Homologous","Homologous","Random","Random")))+
+  geom_ribbon(aes(x = time, y = med_surv, ymin = lowerCI, ymax = upperCI, fill = dataset), alpha = 0.3, color = NA)+
+  scale_color_grey(start = 0.6, end = 0.3) +
+  scale_fill_grey(start = 0.6, end = 0.3) +
+  labs(color = "", fill = "", y = "Median probability of survival without reinfection", x = "Time in days") +
+  scale_y_continuous(limits = c(0,1))+
+  theme_bw()
+
+homol_random_Sx_fig
+
+saveRDS(homol_random_Sx_fig, paste0("figures/robj/", CurrentEpitopeName,"_homolvrandom_survival_Sx.RDS"))
+
+
+
+```
+
+
+Let's do some log rank tests for these curves
+```{r}
+## Asx
+homol_random_Asx_logrank <- lapply(1:1000, function(x){
+  broom::glance(survdiff(Surv(Days,EventCensored)~dataset,
+          data=perm_data[[x]] %>% 
+            filter(symptomatic_status == "asymptomatic infection") %>%
+            select(sample_name_dbs, Days, EventCensored, perm) %>%
+            mutate(dataset = "random") %>%
+            rbind(TimeToDataAdvEpitope_60 %>% 
+                    filter(symptomatic_status == "asymptomatic infection") %>%
+                    select(sample_name_dbs, Days, EventCensored) %>%
+                    mutate(dataset = "data", perm = NA))))
+
+}) 
+
+homol_random_Asx_logrank_t <- homol_random_Asx_logrank %>%
+  transpose()
+
+homol_random_Asx_logrank_stats <- tibble(chisq = unlist(homol_random_Asx_logrank_t$statistic), p.value = unlist(homol_random_Asx_logrank_t$p.value))
+
+
+homol_random_Asx_chisq_fig <- homol_random_Asx_logrank_stats %>%
+  ggplot() +
+  geom_histogram(aes(x = chisq), bins = 100) +
+  labs(y = "Count", x = "Chi Squared Test Statistic", title = "Asx") +
+  theme_bw()
+
+
+homol_random_Asx_chisq_fig
+
+saveRDS(homol_random_Asx_chisq_fig, paste0("figures/robj/", CurrentEpitopeName, "_homol_random_Asx_chisq_fig.RDS"))
+
+homol_random_Asx_p_fig <- homol_random_Asx_logrank_stats %>%
+  ggplot() +
+  geom_histogram(aes(x = p.value), bins = 100) +
+  scale_x_continuous(trans = "log10") +
+  labs(y = "Count", x = "P value") +
+  theme_bw()
+
+homol_random_Asx_p_fig
+
+saveRDS(homol_random_Asx_p_fig, paste0("figures/robj/", CurrentEpitopeName, "_homol_random_Asx_p_fig.RDS"))
+
+homol_random_Asx_logrank_stats %>%
+  summarise(med_chisq = median(chisq), med_p = median(p.value))
+
+```
+
+```{r}
+
+## Sx
+homol_random_Sx_logrank <- lapply(1:1000, function(x){
+  broom::glance(survdiff(Surv(Days,EventCensored)~dataset,
+          data=perm_data[[x]] %>% 
+            filter(symptomatic_status == "symptomatic infection") %>%
+            select(sample_name_dbs, Days, EventCensored, perm) %>%
+            mutate(dataset = "random") %>%
+            rbind(TimeToDataAdvEpitope_60 %>% 
+                    filter(symptomatic_status == "symptomatic infection") %>%
+                    select(sample_name_dbs, Days, EventCensored) %>%
+                    mutate(dataset = "data", perm = NA))))
+
+}) 
+
+homol_random_Sx_logrank_t <- homol_random_Sx_logrank %>%
+  transpose()
+
+homol_random_Sx_logrank_stats <- tibble(chisq = unlist(homol_random_Sx_logrank_t$statistic), p.value = unlist(homol_random_Sx_logrank_t$p.value))
+
+
+homol_random_Sx_chisq_fig <- homol_random_Sx_logrank_stats %>%
+  ggplot() +
+  geom_histogram(aes(x = chisq), bins = 100) +
+  labs(y = "Count", x = "Chi Squared Test Statistic", title = "Sx") +
+  theme_bw()
+
+
+homol_random_Sx_chisq_fig
+
+saveRDS(homol_random_Sx_chisq_fig, paste0("figures/robj/", CurrentEpitopeName, "_homol_random_Sx_chisq_fig.RDS"))
+
+homol_random_Sx_p_fig <- homol_random_Sx_logrank_stats %>%
+  ggplot() +
+  geom_histogram(aes(x = p.value), bins = 100) +
+  scale_x_continuous(trans = "log10") +
+  labs(y = "Count", x = "P value") +
+  theme_bw()
+
+homol_random_Sx_p_fig
+
+saveRDS(homol_random_Sx_p_fig, paste0("figures/robj/", CurrentEpitopeName, "_homol_random_Sx_p_fig.RDS"))
+
+homol_random_Sx_logrank_stats %>%
+  summarise(med_chisq = median(chisq), med_p = median(p.value))
+
+
+```
+
+
+
 ## Symptomaticity-stratified survival and log-rank tests on randomized datasets
 ```{r}
 #do survival analyses on all of the permuted datasets
