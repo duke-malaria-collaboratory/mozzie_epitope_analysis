@@ -485,11 +485,38 @@ classified_infections_60 %>%
          moi_cat = ifelse(moi < 2, "1",
                           ifelse(moi > 1 & moi < 6, "2-5",
                                  ifelse(moi > 5, "> 5", NA)))) %>%
-  select(symptomatic_status, moi_cat, csp_reads, ama_reads) %>%
+  select(symptomatic_status, moi, moi_cat, csp_reads, ama_reads) %>%
   tbl_summary(by = symptomatic_status) %>%
   add_p() %>%
   add_overall()
 
+```
+
+**MOI of subsequent infection**
+```{r}
+classified_infections_60 %>%
+  left_join(csp, by = "sample_name_dbs") %>%
+  rename(csp_moi = haplotype_number,
+         csp_reads = haplotype_reads,
+         csp_haps = haplotype_list) %>%
+  left_join(ama, by = "sample_name_dbs") %>%
+  rename(ama_moi = haplotype_number,
+         ama_reads = haplotype_reads,
+         ama_haps = haplotype_list) %>%
+  mutate(moi = pmax(csp_moi, ama_moi, na.rm = TRUE),
+         moi_cat = ifelse(moi < 2, "1",
+                          ifelse(moi > 1 & moi < 6, "2-5",
+                                 ifelse(moi > 5, "> 5", NA)))) %>%
+  group_by(unq_memID) %>%
+  arrange(ymd(sample_id_date)) %>%
+  mutate(total_episodes = n(), episode_no = row_number(unq_memID), subsequent_episodes = total_episodes - episode_no) %>%
+  mutate(moi_next = lead(moi),
+         moi_cat_next = lead(moi_cat)) %>%
+  ungroup() %>%
+  select(symptomatic_status, moi_next, moi_cat_next) %>%
+  tbl_summary(by = symptomatic_status) %>%
+  add_p() %>%
+  add_overall()
 ```
 
 
