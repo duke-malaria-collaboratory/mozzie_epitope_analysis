@@ -466,6 +466,27 @@ classified_infections_60 %>%
   
 ```
 
+
+**subsequent infections/month**
+```{r}
+classified_infections_60 %>%
+  group_by(unq_memID) %>%
+  mutate(total_episodes = n()) %>%
+  arrange(ymd(sample_id_date)) %>%
+  mutate(episode_no = row_number(unq_memID), subsequent_episodes = total_episodes - episode_no) %>%
+  ungroup() %>%
+  mutate(months_to_end = as.period(max(ymd(sample_id_date))-ymd(sample_id_date)) %/% months(1), subsequent_permonth =  ifelse(subsequent_episodes == 0,0, subsequent_episodes/as.numeric(months_to_end))) %>%
+  select(symptomatic_status, subsequent_permonth) %>%
+  tbl_summary(by = symptomatic_status) %>%
+  add_p() %>%
+  add_overall()
+
+
+
+```
+
+
+
 **MOI and read coverage**
 Will need to import deep sequencing data for this one and merge.
 ```{r}
