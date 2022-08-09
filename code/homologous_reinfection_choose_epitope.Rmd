@@ -1193,21 +1193,6 @@ surv_data_forfig <- surv_data %>%
           mutate(dataset = "Random"))
 
 
-homol_random_fig <- surv_data_forfig %>%
-  ggplot(aes(x = time, y = med_surv, color = dataset)) +
-  geom_line(aes(x = time, y = med_surv))+
-  geom_line(data = tibble(time = c(0,61,0,61), med_surv = c(1,1,1,1), dataset = c("Homologous","Homologous","Random","Random")))+
-  geom_ribbon(aes(x = time, y = med_surv, ymin = lowerCI, ymax = upperCI, fill = dataset), alpha = 0.3, color = NA)+
-  scale_color_grey(start = 0.6, end = 0.3) +
-  scale_fill_grey(start = 0.6, end = 0.3) +
-  labs(color = "", fill = "", y = "Median probability of survival without reinfection", x = "Time in days") +
-  scale_y_continuous(limits = c(0,1))+
-  theme_bw()
-
-homol_random_fig
-
-saveRDS(homol_random_fig, paste0("figures/robj/", CurrentEpitopeName,"_homolvrandom_survival.RDS"))
-
 
 ```
 Log-rank tests for homol v random
@@ -1251,11 +1236,34 @@ homol_random_p_fig
 
 saveRDS(homol_random_p_fig, paste0("figures/robj/", CurrentEpitopeName, "_homol_random_p_fig.RDS"))
 
-homol_random_logrank_stats %>%
+homol_random_logrank_med <- homol_random_logrank_stats %>%
   summarise(med_chisq = median(chisq), med_p = median(p.value))
+
+homol_random_logrank_med
 
 ```
 
+Survival curve
+```{r}
+homol_random_fig <- surv_data_forfig %>%
+  ggplot(aes(x = time, y = med_surv, color = dataset)) +
+  geom_line(aes(x = time, y = med_surv))+
+  geom_line(data = tibble(time = c(0,61,0,61), med_surv = c(1,1,1,1), dataset = c("Homologous","Homologous","Random","Random")))+
+  geom_ribbon(aes(x = time, y = med_surv, ymin = lowerCI, ymax = upperCI, fill = dataset), alpha = 0.3, color = NA)+
+  scale_color_grey(start = 0.6, end = 0.3) +
+  scale_fill_grey(start = 0.6, end = 0.3) +
+  labs(color = "", fill = "", y = "Median probability of survival without reinfection", x = "Time in days") +
+  annotate("rect", xmin = 240, xmax = 365, ymin = 0.01, ymax = 0.18, color = "black", fill = "white") +
+  annotate("text", x = 300, y = 0.13, label = paste0("Median \u03a7\u00b2 = ", round(homol_random_logrank_med$med_chisq,3)))+ 
+  annotate("text", x = 305, y = 0.06, label = paste0("Median p = ", round(homol_random_logrank_med$med_p ,4))) +
+  scale_y_continuous(limits = c(0,1))+
+  theme_bw()
+
+homol_random_fig
+
+saveRDS(homol_random_fig, paste0("figures/robj/", CurrentEpitopeName,"_homolvrandom_survival.RDS"))
+
+```
 
 
 ## Homologous v random Asx/Sx
@@ -1312,24 +1320,6 @@ surv_Asx_data_forfig <- surv_homol_Asx %>%
           mutate(dataset = "Random"))
 
 
-homol_random_Asx_fig <- surv_Asx_data_forfig %>%
-  ggplot(aes(x = time, y = med_surv, color = dataset)) +
-  geom_line(aes(x = time, y = med_surv))+
-  geom_line(data = tibble(time = c(0,61,0,61), med_surv = c(1,1,1,1), dataset = c("Homologous","Homologous","Random","Random")))+
-  geom_ribbon(aes(x = time, y = med_surv, ymin = lowerCI, ymax = upperCI, fill = dataset), alpha = 0.3, color = NA)+
-  scale_color_grey(start = 0.6, end = 0.3) +
-  scale_fill_grey(start = 0.6, end = 0.3) +
-  labs(color = "", fill = "", y = "Median probability of survival without reinfection", x = "Time in days") +
-  scale_y_continuous(limits = c(0,1))+
-  theme_bw()
-
-homol_random_Asx_fig
-
-
-saveRDS(homol_random_Asx_fig, paste0("figures/robj/", CurrentEpitopeName,"_homolvrandom_survival_Asx.RDS"))
-
-
-
 ## Sx
 
 perm_surv_Sx <- lapply(1:1000, function(x){
@@ -1360,21 +1350,6 @@ surv_Sx_data_forfig <- surv_homol_Sx %>%
           select(time, med_surv, lowerCI, upperCI) %>%
           mutate(dataset = "Random"))
 
-
-homol_random_Sx_fig <- surv_Sx_data_forfig %>%
-  ggplot(aes(x = time, y = med_surv, color = dataset)) +
-  geom_line(aes(x = time, y = med_surv))+
-  geom_line(data = tibble(time = c(0,61,0,61), med_surv = c(1,1,1,1), dataset = c("Homologous","Homologous","Random","Random")))+
-  geom_ribbon(aes(x = time, y = med_surv, ymin = lowerCI, ymax = upperCI, fill = dataset), alpha = 0.3, color = NA)+
-  scale_color_grey(start = 0.6, end = 0.3) +
-  scale_fill_grey(start = 0.6, end = 0.3) +
-  labs(color = "", fill = "", y = "Median probability of survival without reinfection", x = "Time in days") +
-  scale_y_continuous(limits = c(0,1))+
-  theme_bw()
-
-homol_random_Sx_fig
-
-saveRDS(homol_random_Sx_fig, paste0("figures/robj/", CurrentEpitopeName,"_homolvrandom_survival_Sx.RDS"))
 
 
 
@@ -1425,8 +1400,10 @@ homol_random_Asx_p_fig
 
 saveRDS(homol_random_Asx_p_fig, paste0("figures/robj/", CurrentEpitopeName, "_homol_random_Asx_p_fig.RDS"))
 
-homol_random_Asx_logrank_stats %>%
+median_Asx_logrank <- homol_random_Asx_logrank_stats %>%
   summarise(med_chisq = median(chisq), med_p = median(p.value))
+
+median_Asx_logrank
 
 ```
 
@@ -1474,9 +1451,60 @@ homol_random_Sx_p_fig
 
 saveRDS(homol_random_Sx_p_fig, paste0("figures/robj/", CurrentEpitopeName, "_homol_random_Sx_p_fig.RDS"))
 
-homol_random_Sx_logrank_stats %>%
+median_Sx_logrank <- homol_random_Sx_logrank_stats %>%
   summarise(med_chisq = median(chisq), med_p = median(p.value))
 
+median_Sx_logrank
+
+
+
+
+
+```
+
+Survival curves with logrank test results
+```{r}
+
+homol_random_Asx_fig <- surv_Asx_data_forfig %>%
+  ggplot(aes(x = time, y = med_surv, color = dataset)) +
+  geom_line(aes(x = time, y = med_surv))+
+  geom_line(data = tibble(time = c(0,61,0,61), med_surv = c(1,1,1,1), dataset = c("Homologous","Homologous","Random","Random")))+
+  geom_ribbon(aes(x = time, y = med_surv, ymin = lowerCI, ymax = upperCI, fill = dataset), alpha = 0.3, color = NA)+
+  scale_color_grey(start = 0.6, end = 0.3) +
+  scale_fill_grey(start = 0.6, end = 0.3) +
+  labs(color = "", fill = "", y = "Median probability of survival without reinfection", x = "Time in days") +
+  annotate("rect", xmin = 235, xmax = 365, ymin = 0.01, ymax = 0.18, color = "black", fill = "white") +
+  annotate("text", x = 300, y = 0.13, label = paste0("Median \u03a7\u00b2 = ", round(median_Asx_logrank$med_chisq,3)))+ 
+  annotate("text", x = 300, y = 0.06, label = paste0("Median p = ", round(median_Asx_logrank$med_p ,4)))+
+  scale_y_continuous(limits = c(0,1))+
+  theme_bw()
+
+homol_random_Asx_fig
+
+
+saveRDS(homol_random_Asx_fig, paste0("figures/robj/", CurrentEpitopeName,"_homolvrandom_survival_Asx.RDS"))
+
+
+
+
+##Sx
+homol_random_Sx_fig <- surv_Sx_data_forfig %>%
+  ggplot(aes(x = time, y = med_surv, color = dataset)) +
+  geom_line(aes(x = time, y = med_surv))+
+  geom_line(data = tibble(time = c(0,61,0,61), med_surv = c(1,1,1,1), dataset = c("Homologous","Homologous","Random","Random")))+
+  geom_ribbon(aes(x = time, y = med_surv, ymin = lowerCI, ymax = upperCI, fill = dataset), alpha = 0.3, color = NA)+
+  scale_color_grey(start = 0.6, end = 0.3) +
+  scale_fill_grey(start = 0.6, end = 0.3) +
+  labs(color = "", fill = "", y = "Median probability of survival without reinfection", x = "Time in days") +
+  annotate("rect", xmin = 235, xmax = 365, ymin = 0.01, ymax = 0.18, color = "black", fill = "white") +
+  annotate("text", x = 300, y = 0.13, label = paste0("Median \u03a7\u00b2 = ", round(median_Sx_logrank$med_chisq,3)))+ 
+  annotate("text", x = 300, y = 0.06, label = paste0("Median p = ", round(median_Sx_logrank$med_p ,4))) +
+  scale_y_continuous(limits = c(0,1))+
+  theme_bw()
+
+homol_random_Sx_fig
+
+saveRDS(homol_random_Sx_fig, paste0("figures/robj/", CurrentEpitopeName,"_homolvrandom_survival_Sx.RDS"))
 
 ```
 
