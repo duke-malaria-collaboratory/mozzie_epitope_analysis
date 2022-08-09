@@ -801,6 +801,121 @@ saveRDS(effect_mod_summary_fig, paste0("figures/robj/", CurrentEpitopeName,"_eff
 
 ```
 
+Let's look at our rare epitopes a little closer
+```{r}
+#How many rare epitopes were singletons or doubletons
+TimeToDataAdvEpitope_60 %>%
+  filter(quant == 1) %>%
+  group_by(AAs) %>%
+  count() %>%
+  arrange(n)
+
+TimeToDataAdvEpitope_60 %>%
+  filter(quant == 1) %>%
+  group_by(AAs) %>%
+  count() %>%
+  filter(n < 3) %>%
+  nrow()
+
+
+# How many rare types were observed in polyclonal vs monoclonal infections?
+# Let's look at the epitope moi for each quantile
+TimeToDataAdvEpitope_60 %>%
+  ggplot() +
+  aes(x = factor(quant, levels = c(3,2,1), labels = c("Common", "Middling", "Rare")), y = epitopecount) +
+  labs(x = "", y = "Epitope MOI") +
+  geom_boxplot() +
+  geom_jitter(alpha = 0.1, width = 0.1) +
+  theme_bw()
+
+
+TimeToDataAdvEpitope_60 %>%
+  group_by(quant) %>%
+  mutate(total_epitope_occurences = n()) %>%
+  ungroup() %>%
+  filter(epitopecount == 1) %>%
+  group_by(quant) %>%
+  summarise(prop_mono = n()/total_epitope_occurences, se = sqrt(prop_mono*(1-prop_mono)/total_epitope_occurences), lower = prop_mono - se, upper = prop_mono + se) %>%
+  unique()
+
+library(gtsummary)
+TimeToDataAdvEpitope_60 %>%
+  select(quant, epitopecount, epitopeCat) %>%
+  mutate(quant = factor(quant,levels = c(3,2,1), labels = c("Common", "Middling", "Rare") )) %>%
+  tbl_summary(by = quant) %>%
+  add_p() %>%
+  add_overall()
+
+```
+
+We want to know read support for common, middling, and rare epitope types
+csp
+```{r eval=!AMA}
+Htype_reads <- read_csv("data/original/spat21_csp_haplotype_table_censored_final_version_with_moi_and_ids_CLEANVERSION_30SEPT2019.csv") %>%
+  select(-MiSeq.ID, -Run, -sample_type, -haplotype_number, -haplotype_reads) %>%
+  filter(sample_name_dbs %in% TimeToDataAdvEpitope_60$sample_name_dbs) %>%
+  pivot_longer(2:299, names_to = "HType", values_to = "reads") %>%
+  filter(reads > 0)
+
+
+AAs_Htype_key <- MergHaploAA %>% 
+  filter(sample_name_dbs %in% TimeToDataAdvEpitope_60$sample_name_dbs) %>%
+  select(HType, sample_name_dbs, c(EpitopeCurrent)) %>%
+  unite("AAs",3:6, sep = "", remove = FALSE)
+
+read_support <- AAs_Htype_key %>%
+  left_join(Htype_reads) %>%
+  left_join(TimeToDataAdvEpitope_60 %>%
+              select(AAs, quant) %>%
+              distinct())
+
+```
+ama1
+```{r eval=AMA}
+Htype_reads <- read_csv("data/original/spat21_AMA_haplotype_table_censored_final_version_with_moi_and_ids_CLEANVERSION_15OCT2019.csv") %>%
+  select(-MiSeq.ID, -Run, -sample_type, -haplotype_number, -haplotype_reads) %>%
+  filter(sample_name_dbs %in% TimeToDataAdvEpitope_60$sample_name_dbs) %>%
+  pivot_longer(2:299, names_to = "HType", values_to = "reads") %>%
+  filter(reads > 0)
+
+
+AAs_Htype_key <- MergHaploAA %>% 
+  filter(sample_name_dbs %in% TimeToDataAdvEpitope_60$sample_name_dbs) %>%
+  select(HType, sample_name_dbs, c(EpitopeCurrent)) %>%
+  unite("AAs",3:6, sep = "", remove = FALSE)
+
+read_support <- AAs_Htype_key %>%
+  left_join(Htype_reads) %>%
+  left_join(TimeToDataAdvEpitope_60 %>%
+              select(AAs, quant) %>%
+              distinct())
+
+```
+
+
+comparing read support between common, middling, and rare types
+```{r}
+read_support %>%
+  ggplot() +
+  aes(x = factor(quant, levels = c(3,2,1), labels = c("Common", "Middling", "Rare")), y = reads) +
+  scale_y_log10() +
+  labs(x = "", y = "Reads") +
+  geom_boxplot() +
+  theme_bw()
+
+
+read_support %>%
+  mutate(quant = factor(quant, levels = c(3,2,1), labels = c("Common", "Middling", "Rare"))) %>%
+  select(quant, reads) %>%
+  tbl_summary(by = quant) %>%
+  add_p() %>%
+  add_overall()
+
+
+
+```
+
+
 ## Age-stratified hazard ratios
 We want to know whether there is effect measure modification by age group.
 First let's look at the number of people in each age group
