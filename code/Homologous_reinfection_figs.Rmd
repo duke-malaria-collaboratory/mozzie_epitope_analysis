@@ -379,29 +379,110 @@ ggsave(plot = moi_sunburst_vertical, "figures/moi_sunburst_vertical.png", height
 # Reinfection with homologous epitopes (vs random)
 ```{r}
 
+#All episodes
+
+## Removing annotated rectangle that's in the way
+CD4_homolvrandom$layers[[4]] <- NULL
+CD8_homolvrandom$layers[[4]] <- NULL
+c1L_homolvrandom$layers[[4]] <- NULL
+
 homol_v_random <- ggarrange(CD4_homolvrandom +
-                              labs(title = "CSP Th2R", x = "") +
+                              labs(x = "", y = " \n \n \n \n \n \n ", title = "All episodes") +
+                              geom_vline(xintercept = 60, linetype = "dotted") +
+                              scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
+                              theme(plot.title = element_text(hjust = 0.5, size = 15, face = "bold"), axis.text.x = element_blank(), axis.ticks.x = element_blank()),
+                            CD8_homolvrandom +
+                              labs(y = " \n \n \n \n \n \nMedian probability of survival without reinfection", x = "") +
+                              geom_vline(xintercept = 60, linetype = "dotted") +
+                              scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
+                              theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_blank(), axis.ticks.x = element_blank()),
+                            c1L_homolvrandom +
+                              labs(x = "", y = " \n \n \n \n \n \n ") +
                               geom_vline(xintercept = 60, linetype = "dotted") +
                               scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
                               theme(plot.title = element_text(hjust = 0.5)),
-                            CD8_homolvrandom +
-                              labs(title = "CSP Th3R") +
-                              geom_vline(xintercept = 60, linetype = "dotted") +
-                              scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
-                              theme(plot.title = element_text(hjust = 0.5), axis.text.y = element_blank(), axis.ticks.y = element_blank(), axis.title.y = element_blank()),
-                            c1L_homolvrandom +
-                              labs(title = "AMA-1 c1L", x = "") +
-                              geom_vline(xintercept = 60, linetype = "dotted") +
-                              scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
-                              theme(plot.title = element_text(hjust = 0.5), axis.text.y = element_blank(), axis.ticks.y = element_blank(), axis.title.y = element_blank()),
+                            NULL,
                             common.legend = TRUE,
-                            legend = "bottom",
-                            widths = c(1.15,1,1),
-                            nrow = 1)
+                            legend = "none",
+                            ncol = 1,
+                            heights = c(1.1,1,1,0.13),
+                            labels = c("CSP Th2R", "CSP Th3R", "AMA-1 c1L"),
+                            label.x = -0.09,
+                            label.y = 0.6)
 
 homol_v_random
 
-ggsave(plot = homol_v_random, "figures/homolvrandom.png", width = 10, height = 4)
+
+#Asx
+
+## Removing annotated rectangle that's in the way
+cd4_homolrandom_Asx$layers[[4]] <- NULL
+cd8_homolrandom_Asx$layers[[4]] <- NULL
+c1L_homolrandom_Asx$layers[[4]] <- NULL
+
+homol_v_random_Asx <- ggarrange(cd4_homolrandom_Asx +
+                              labs(x = "", y = "", title = "Asymptomatic episodes") +
+                              geom_vline(xintercept = 60, linetype = "dotted") +
+                              scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
+                              theme(plot.title = element_text(hjust = 0.5, size = 15, face = "bold"), axis.text.x = element_blank(), axis.ticks.x = element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank()),
+                            cd8_homolrandom_Asx +
+                              labs(y = "", x = "") +
+                              geom_vline(xintercept = 60, linetype = "dotted") +
+                              scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
+                              theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank()),
+                            c1L_homolrandom_Asx +
+                              labs(y = "") +
+                              geom_vline(xintercept = 60, linetype = "dotted") +
+                              scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
+                              theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()),
+                            common.legend = TRUE,
+                            legend = "bottom",
+                            ncol = 1,
+                            heights = c(1.1,1,1))
+
+homol_v_random_Asx
+
+
+#Sx
+
+## Removing annotated rectangle that's in the way
+cd4_homolrandom_Sx$layers[[4]] <- NULL
+cd8_homolrandom_Sx$layers[[4]] <- NULL
+c1L_homolrandom_Sx$layers[[4]] <- NULL
+
+homol_v_random_Sx <- ggarrange(cd4_homolrandom_Sx +
+                              labs(x = "", y = "", title = "Symptomatic episodes") +
+                              geom_vline(xintercept = 60, linetype = "dotted") +
+                              scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
+                              theme(plot.title = element_text(hjust = 0.5, size = 15, face = "bold"), axis.text.x = element_blank(), axis.ticks.x = element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank()),
+                            cd8_homolrandom_Sx +
+                              labs(y = "", x = "") +
+                              geom_vline(xintercept = 60, linetype = "dotted") +
+                              scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
+                              theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank()),
+                            c1L_homolrandom_Sx +
+                              labs(x = "", y = "") +
+                              geom_vline(xintercept = 60, linetype = "dotted") +
+                              scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
+                              theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()),
+                            NULL,
+                            common.legend = TRUE,
+                            legend = "none",
+                            ncol = 1,
+                            heights = c(1.1,1,1,0.13))
+
+homol_v_random_Sx
+
+
+homol_random_All <- ggarrange(homol_v_random,
+                              homol_v_random_Asx,
+                              homol_v_random_Sx,
+                              nrow = 1,
+                              widths = c(1.2,1,1))
+
+ggsave(plot = homol_random_All, "figures/homolrandom.png", width = 13, height = 10)
+
+
 
 ```
 
