@@ -52,6 +52,10 @@ cd4_moi <- readRDS("figures/robj/cd4_moi_plot.RDS")
 
 cd4_sunburst <- readRDS("figures/robj/cd4_sunburst.RDS")
 
+cd4_homolrandom_Asx <- readRDS("figures/robj/CD4_homolvrandom_survival_Asx.RDS")
+
+cd4_homolrandom_Sx <- readRDS("figures/robj/CD4_homolvrandom_survival_Sx.RDS")
+
 ```
 
 csp cd8+
@@ -83,6 +87,10 @@ cd8_moi <- readRDS("figures/robj/cd8_moi_plot.RDS")
 
 cd8_sunburst <- readRDS("figures/robj/cd8_sunburst.RDS")
 
+cd8_homolrandom_Asx <- readRDS("figures/robj/CD8_homolvrandom_survival_Asx.RDS")
+
+cd8_homolrandom_Sx <- readRDS("figures/robj/CD8_homolvrandom_survival_Sx.RDS")
+
 ```
 
 
@@ -113,7 +121,30 @@ Combined_effect_meas <- readRDS("figures/robj/Combined_effect_mod.RDS")
 
 Combined_moi <- readRDS("figures/robj/combined_moi_plot.RDS")
 
+Combined_homolrandom_Asx <- readRDS("figures/robj/Combined_homolvrandom_survival_Asx.RDS")
+
+Combined_homolrandom_Sx <- readRDS("figures/robj/Combined_homolvrandom_survival_Sx.RDS")
+
 ```
+
+
+dv10
+```{r}
+DV10_homolsurv <-  readRDS("figures/robj/DV10_homol_fig_cutoff60.RDS")
+
+DV10_homolcoxme <- readRDS("figures/robj/DV10_coxme_fig.RDS")
+
+DV10_homolvrandom <- readRDS("figures/robj/DV10_homolvrandom_survival.RDS")
+
+DV10_homolrandom_Asx <- readRDS("figures/robj/DV10_homolvrandom_survival_Asx.RDS")
+
+DV10_homolrandom_Sx <- readRDS("figures/robj/DV10_homolvrandom_survival_Sx.RDS")
+
+dv10_moi <- readRDS("figures/robj/dv10_moi_plot.RDS")
+
+dv10_sunburst <- readRDS("figures/robj/dv10_sunburst.RDS")
+```
+
 
 
 ama-1
@@ -140,6 +171,10 @@ AMA_cutoff60 <- readRDS("figures/robj/AMA_freq_compare_cutoff60.RDS")
 AMA_moi <- readRDS("figures/robj/ama_moi_plot.RDS")
 
 AMA_sunburst <- readRDS("figures/robj/ama_sunburst.RDS")
+
+AMA_homolrandom_Asx <- readRDS("figures/robj/AMA_homolvrandom_survival_Asx.RDS")
+
+AMA_homolrandom_Sx <- readRDS("figures/robj/AMA_homolvrandom_survival_Sx.RDS")
 
 ```
 
@@ -171,6 +206,10 @@ c1L_effect_meas <- readRDS("figures/robj/c1L_effect_mod.RDS")
 c1L_moi <- readRDS("figures/robj/c1L_moi_plot.RDS")
 
 c1L_sunburst <- readRDS("figures/robj/c1L_sunburst.RDS")
+
+c1L_homolrandom_Asx <- readRDS("figures/robj/c1L_homolvrandom_survival_Asx.RDS")
+
+c1L_homolrandom_Sx <- readRDS("figures/robj/c1L_homolvrandom_survival_Sx.RDS")
 
 ```
 
@@ -227,65 +266,110 @@ c1L_moi_alt <- ggplot(c1L_moi$data, aes(x = HType_moi, y = c1L_moi)) +
   labs(x = "Haplotype MOI", y = "Epitope MOI", fill = "Count") +
   theme(plot.title = element_text(hjust = 0.5))
 
+dv10_moi_alt <- ggplot(dv10_moi$data, aes(x = HType_moi, y = dv10_moi)) +
+  geom_bin2d(binwidth = 1, breaks = seq(0.5,19.5,1)) +
+  coord_cartesian(xlim = c(1,18.5), ylim = c(1,18.5)) +
+  scale_x_continuous(n.breaks = 10) +
+  scale_y_continuous(n.breaks = 10) +
+  scale_fill_viridis_c(trans = "log", direction = -1, breaks = c(1,10,50,200), option = "mako") +
+  geom_smooth(method = lm,color="black")+
+  labs(title=paste0("DV10"))+
+  theme_bw()+
+  stat_poly_eq(formula = my.formula,
+               aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")),
+               parse = TRUE)+
+  labs(x = "Haplotype MOI", y = "Epitope MOI", fill = "Count") +
+  theme(plot.title = element_text(hjust = 0.5))
+
 
 ##changing color of lines on sunburst plot
 cd4_sunburst$mapping <- aes(x = as.factor(level), y = value, fill = fct_reorder(fill, value, sum), alpha = as.factor(level), color = factor(ifelse(level == 0, "white", "grey50")))
 cd8_sunburst$mapping <- aes(x = as.factor(level), y = value, fill = fct_reorder(fill, value, sum), alpha = as.factor(level), color = factor(ifelse(level == 0, "white", "grey50")))
 c1L_sunburst$mapping <- aes(x = as.factor(level), y = value, fill = fct_reorder(fill, value, sum), alpha = as.factor(level), color = factor(ifelse(level == 0, "white", "grey50")))
+dv10_sunburst$mapping <- aes(x = as.factor(level), y = value, fill = fct_reorder(fill, value, sum), alpha = as.factor(level), color = factor(ifelse(level == 0, "white", "grey50")))
 
 cd4_sunburst$layers[[1]]$aes_params$colour <- NULL
 cd8_sunburst$layers[[1]]$aes_params$colour <- NULL
 c1L_sunburst$layers[[1]]$aes_params$colour <- NULL
+dv10_sunburst$layers[[1]]$aes_params$colour <- NULL
 
 
 
 
-sunburst_plot <- ggarrange(cd4_sunburst +
-                                          labs(title = "CSP Th2R") +
+
+###Changing epitope type label to be more legible
+
+dv10_sunburst$layers[[3]]$data$label <- "Epitope\ntype"
+cd4_sunburst$layers[[3]]$data$label <- "Epitope\ntype"
+cd8_sunburst$layers[[3]]$data$label <- "Epitope\ntype"
+c1L_sunburst$layers[[3]]$data$label <- "Epitope\ntype"
+
+
+dv10_sunburst$layers[[3]]$data$x <- 0.9
+cd4_sunburst$layers[[3]]$data$x <- 0.9
+cd8_sunburst$layers[[3]]$data$x <- 0.9
+c1L_sunburst$layers[[3]]$data$x <- 0.9
+
+
+sunburst_plot_vertical <- ggarrange(dv10_sunburst +
+                             scale_color_manual(guide = "none", values = c("grey5", "white")) +
+                               #labs(title = "CSP DV10") +
+                             scale_alpha_manual(values = c("0" = 0, "1" = 1, "2" = 0.5), guide = "none") +
+                                          theme(plot.title = element_text(hjust = 0.5, face = "bold"), plot.margin = unit(c(0,0,0,0), "cm")),
+                             cd4_sunburst +
+                                          #labs(title = "CSP Th2R") +
                              scale_color_manual(guide = "none", values = c("grey5", "white")) +
                              scale_alpha_manual(values = c("0" = 0, "1" = 1, "2" = 0.5), guide = "none") +
                                           theme(plot.title = element_text(hjust = 0.5, face = "bold"), plot.margin = unit(c(0,0,0,0), "cm")),
             cd8_sunburst +
-                                          labs(title = "CSP Th3R") +
+                                          #labs(title = "CSP Th3R") +
               scale_color_manual(guide = "none", values = c("grey5", "white")) +
                              scale_alpha_manual(values = c("0" = 0, "1" = 1, "2" = 0.5), guide = "none") +
                                           theme(plot.title = element_text(hjust = 0.5, face = "bold"), plot.margin = unit(c(0,0,0,0), "cm")),
             c1L_sunburst +
-                                          labs(title = "AMA-1 c1L") +
+                                          #labs(title = "AMA-1 c1L") +
               scale_color_manual(guide = "none", values = c("grey5", "white")) +
                              scale_alpha_manual(values = c("0" = 0, "1" = 1, "2" = 0.5), guide = "none") +
                                           theme(plot.title = element_text(hjust = 0.5, face = "bold"), plot.margin = unit(c(0,0,0,0), "cm")),
-            nrow = 1,
-            widths = c(1,1,1))
+            ncol = 1,
+            heights = c(1,1,1,1),
+            labels = c("CSP DV10", "CSP Th2R", "CSP Th3R", "AMA-1 c1L"),
+            label.x = -0.05,
+            label.y = 0.5)
 
-moi_plot <- ggarrange(NULL,
+
+
+moi_plot_vertical <- ggarrange(NULL,
+                      dv10_moi_alt +
+              labs(title = NULL)+
+                theme(plot.margin = unit(c(0,0,0,0), "cm")),
+              NULL,
                       cd4_moi_alt +
-              labs(x = "", title = NULL)+
+              labs(title = NULL)+
                 theme(plot.margin = unit(c(0,0,0,0), "cm")),
               NULL,
             cd8_moi_alt +
-              labs(y = "", title = NULL)+
+              labs( title = NULL)+
                 theme(plot.margin = unit(c(0,0,0,0), "cm")),
             NULL,
             c1L_moi_alt +
-              labs(x = "", y = "", title = NULL)+
+              labs( title = NULL)+
                 theme(plot.margin = unit(c(0,0,0,0), "cm")),
             NULL,
-            nrow = 1,
-            widths = c(0.05,1,0.2,1,0.2,1,0.1),
-            align = "h",
+            ncol = 1,
+            heights = c(0.05,1,0.2,1,0.2,1,0.2,1,0.1),
+            align = "v",
             common.legend = TRUE,
-            legend = "bottom")
+            legend = "right")
 
 
-moi_sunburst <- ggarrange(sunburst_plot,
-                          moi_plot,
-                          nrow = 2,
-                          heights = c(6,5),
-                          align = "v")
+moi_sunburst_vertical <- ggarrange(sunburst_plot_vertical,
+                          moi_plot_vertical,
+                          ncol = 2,
+                          widths = c(6,4),
+                          align = "h")
 
-
-ggsave(plot = moi_sunburst, "figures/moi_sunburst.png", width = 14, height = 9)
+ggsave(plot = moi_sunburst_vertical, "figures/moi_sunburst_vertical.png", height = 15, width = 10)
 
 
 ```
