@@ -138,7 +138,7 @@ dim(csp_MergHaploAA)
 csp_MergedData<-merge(HDS,csp_MergHaploAA,by="sample_name_dbs") %>%
   select(-haplotype_reads, -nstopcodon) %>%
   rowwise() %>%
-  mutate(cd4_epitope = paste0(substr(x,25,25),substr(x,28,28), substr(x,29,29), substr(x,31,31)), cd8_epitope = paste0(substr(x,59,59),substr(x,64,64), substr(x,66,66), substr(x,68,68)), combined_epitope = paste0(cd4_epitope, cd8_epitope))
+  mutate(cd4_epitope = paste0(substr(x,25,25),substr(x,28,28), substr(x,29,29), substr(x,31,31)), cd8_epitope = paste0(substr(x,59,59),substr(x,64,64), substr(x,66,66), substr(x,68,68)), combined_epitope = paste0(cd4_epitope, cd8_epitope), dv10_epitope = paste0(substr(x,5,5), substr(x,6,6), substr(x,8,8), substr(x, 10,10)))
 ```
 
 
@@ -251,6 +251,62 @@ ggsave(plot = cd8_sunburst_plot, "figures/cd8_sunburst.png", width = 6, height =
 
 
 ```
+
+
+# dv10
+```{r}
+
+dv10_sunburst <- csp_MergedData %>%
+  group_by(dv10_epitope, HType) %>%
+  summarise(n_samples = n_distinct(sample_name_dbs))
+
+
+dv10_sunburst <- dv10_sunburst %>%
+  mutate(dv10_epitope = as.factor(dv10_epitope) %>% fct_reorder(n_samples, sum)) %>%
+  arrange(dv10_epitope, n_samples) %>%
+  mutate(HType = as.factor(HType) %>% fct_reorder2(dv10_epitope, n_samples))
+  
+
+lvl0 <- tibble(name = "Parent", value = 0, level = 0, fill = NA)
+lvl1 <- dv10_sunburst %>%
+  group_by(dv10_epitope) %>%
+  summarise(value = sum(n_samples)) %>%
+  ungroup() %>%
+  rename(name = dv10_epitope) %>%
+  mutate(level = 1, fill = name)
+
+lvl2 <- dv10_sunburst %>%
+  select(name = HType, value = n_samples, fill = dv10_epitope) %>%
+  mutate(level = 2)
+
+
+combined <- bind_rows(lvl0, lvl1, lvl2) %>%
+  arrange(level, value)
+
+dv10_sunburst_plot <- ggplot(combined, aes(x = as.factor(level), y = value, fill = fct_reorder(fill, value, sum), alpha = as.factor(level))) +
+  geom_col(width = 1, color = "white", size = 0.25, position = "stack") +
+  geom_text(data = combined %>% filter(level == 1, value > 10), mapping = aes(label = name), size = 2.5, position = position_stack(vjust = 0.5), angle = c(-90,-90,0,0,0)) +
+  annotate("text",x = 1.1, y = 1, label = "Epitope type")+
+  annotate("text",x = 3.7, y = 1, label = "Haplotype") +
+  coord_polar(theta = "y") +
+  scale_alpha_manual(values = c("0" = 0, "1" = 1, "2" = 0.7), guide = "none") +
+  scale_x_discrete(breaks = NULL) +
+  scale_y_continuous(breaks = NULL) +
+  scale_fill_manual(values = c("#000080","#32cd32","#8fbc8f","#8b008b","#b03060","#d2b48c","#00ced1","#ffa500","#dc143c")) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+dv10_sunburst_plot
+
+saveRDS(dv10_sunburst_plot, "figures/robj/dv10_sunburst.RDS")
+
+ggsave(plot = dv10_sunburst_plot, "figures/dv10_sunburst.png", width = 6, height = 6)
+
+
+
+```
+
 
 
 #ama
@@ -471,7 +527,7 @@ ggsave(plot = c1L_sunburst_plot, "figures/c1L_sunburst.png", width = 6, height =
 
 csp_moi <- csp_MergedData %>%
   group_by(sample_name_dbs) %>%
-  summarise(HType_moi = mean(haplotype_number), cd4_moi = n_distinct(cd4_epitope), cd8_moi = n_distinct(cd8_epitope), combined_moi = n_distinct(combined_epitope))
+  summarise(HType_moi = mean(haplotype_number), cd4_moi = n_distinct(cd4_epitope), cd8_moi = n_distinct(cd8_epitope), combined_moi = n_distinct(combined_epitope), dv10_moi = n_distinct(dv10_epitope))
 
 ama_moi <- ama_MergedData %>%
   group_by(sample_name_dbs) %>%
@@ -520,6 +576,18 @@ combined_moi_plot <- ggplot(csp_moi,aes(x=HType_moi, y=combined_moi))+
   xlab("Haplotype MOI")+
   ylab("Epitope MOI")
 
+dv10_moi_plot <- ggplot(csp_moi,aes(x=HType_moi, y=dv10_moi))+
+  geom_point(alpha=0.5, position = "jitter")+
+  coord_cartesian(xlim=c(0,18),ylim=c(0,18))+
+  geom_smooth(method = lm,color="black")+
+  labs(title=paste0("DV10 epitope MOI corr."))+
+  theme_bw()+
+  stat_poly_eq(formula = my.formula,
+               aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")),
+               parse = TRUE)+
+  xlab("Haplotype MOI")+
+  ylab("Epitope MOI")
+
 ama_moi_plot <- ggplot(ama_moi,aes(x=HType_moi, y=ama_moi))+
   geom_point(alpha=0.5, position = "jitter")+
   coord_cartesian(xlim=c(0,18),ylim=c(0,18))+
@@ -547,12 +615,14 @@ c1L_moi_plot <- ggplot(c1L_moi,aes(x=HType_moi, y=c1L_moi))+
 cd4_moi_plot
 cd8_moi_plot
 combined_moi_plot
+dv10_moi_plot
 ama_moi_plot
 c1L_moi_plot
 
 saveRDS(cd4_moi_plot, "figures/robj/cd4_moi_plot.RDS")
 saveRDS(cd8_moi_plot, "figures/robj/cd8_moi_plot.RDS")
 saveRDS(combined_moi_plot, "figures/robj/combined_moi_plot.RDS")
+saveRDS(dv10_moi_plot, "figures/robj/dv10_moi_plot.RDS")
 saveRDS(ama_moi_plot, "figures/robj/ama_moi_plot.RDS")
 saveRDS(c1L_moi_plot, "figures/robj/c1L_moi_plot.RDS")
 
