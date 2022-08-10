@@ -43,35 +43,41 @@ library(ggpubr)
 Define current epitope CSP/AMA and AA positions of interest (as determined from the RF models). Need to to this before knitting!
 ```{r,echo=T}
 #CSP CD4 T-cell (Th2R)
-CurrentEpitopeName<-("CD4")
-EpitopeCurrent<-c("x25","x28","x29","x31")
-AMA <- FALSE
+# CurrentEpitopeName<-("CD4")
+# EpitopeCurrent<-c("x25","x28","x29","x31")
+# AMA <- FALSE
+# prev <- TRUE
 
 
 #CSP CD8 T-cell (Th3R)
 # CurrentEpitopeName<-("CD8")
 # EpitopeCurrent<-c("x59","x64","x66","x68")
 # AMA <- FALSE
+# prev <- TRUE
 
 #CSP B-cell DV10
 # CurrentEpitopeName<-("DV10")
 # EpitopeCurrent<-c("x5","x6","x8","x10")
 # AMA <- FALSE
+# prev <- FALSE
 
 # #CSP Combined T-cell
 # CurrentEpitopeName<-("Combined")
 # EpitopeCurrent<-c("x25","x28","x29","x31","x59","x64","x66","x68")
 # AMA <- FALSE
+# prev <- TRUE
 
 # #AMA
-# CurrentEpitopeName<-("AMA")
-# EpitopeCurrent<-c("x36","x44","x77","x90")
-# AMA <- TRUE
+CurrentEpitopeName<-("AMA")
+EpitopeCurrent<-c("x36","x44","x77","x90")
+AMA <- TRUE
+prev <- TRUE
 
 # #AMA c1L
 # CurrentEpitopeName<-("c1L")
 # EpitopeCurrent<-c("x44","x47","x48","x53")
 # AMA <- TRUE
+# prev <- TRUE
 
 
 ```
@@ -618,7 +624,7 @@ We want to know how whether there is an effect-measure modification of epitope t
 
 
 First, we will break the epitope types up into three categories based on prevalence: common, middling, and rare. We will divide them such that there are approx equal number of infections in each category.
-```{r}
+```{r eval = prev}
 
 quant_cut <- function(x, n) {
     qs <- quantile(x, (1:(n-1))/n) #sets the quantile breaks of interest
@@ -662,7 +668,7 @@ TimeToDataAdvEpitope_60 %>%
 
 ```
 Next, we'll make a figure with the 1-yr risk of homologous reinfection for each epitope type overlaid with the number of infections with that type.
-```{r}
+```{r eval = prev}
 
 quant_summary <- TimeToDataAdvEpitope_60 %>%
   group_by(AAs) %>%
@@ -702,7 +708,7 @@ saveRDS(type_prevalence_risk_fig, paste0("figures/robj/", CurrentEpitopeName,"_t
 
 
 Now we'll look to see if there is effect measure modification...
-```{r}
+```{r eval = prev}
 
 
 #Checking quant variable. Crosstab with symptomatic status:
@@ -758,7 +764,7 @@ summary(symp_table)
 
 ```
 Making a summary figure
-```{r}
+```{r eval = prev}
 
 effect_meas_mod_summary <- data.frame(model_1$coefficients) %>% 
   rownames_to_column(var = "variable") %>%
@@ -802,7 +808,7 @@ saveRDS(effect_mod_summary_fig, paste0("figures/robj/", CurrentEpitopeName,"_eff
 ```
 
 Let's look at our rare epitopes a little closer
-```{r}
+```{r eval = prev}
 #How many rare epitopes were singletons or doubletons
 TimeToDataAdvEpitope_60 %>%
   filter(quant == 1) %>%
@@ -850,7 +856,7 @@ TimeToDataAdvEpitope_60 %>%
 
 We want to know read support for common, middling, and rare epitope types
 csp
-```{r eval=!AMA}
+```{r eval= (!AMA & prev)}
 Htype_reads <- read_csv("data/original/spat21_csp_haplotype_table_censored_final_version_with_moi_and_ids_CLEANVERSION_30SEPT2019.csv") %>%
   select(-MiSeq.ID, -Run, -sample_type, -haplotype_number, -haplotype_reads) %>%
   filter(sample_name_dbs %in% TimeToDataAdvEpitope_60$sample_name_dbs) %>%
@@ -861,7 +867,7 @@ Htype_reads <- read_csv("data/original/spat21_csp_haplotype_table_censored_final
 AAs_Htype_key <- MergHaploAA %>% 
   filter(sample_name_dbs %in% TimeToDataAdvEpitope_60$sample_name_dbs) %>%
   select(HType, sample_name_dbs, c(EpitopeCurrent)) %>%
-  unite("AAs",3:6, sep = "", remove = FALSE)
+  unite("AAs",3:(2+length(EpitopeCurrent)), sep = "", remove = FALSE)
 
 read_support <- AAs_Htype_key %>%
   left_join(Htype_reads) %>%
@@ -894,7 +900,7 @@ read_support <- AAs_Htype_key %>%
 
 
 comparing read support between common, middling, and rare types
-```{r}
+```{r eval = prev}
 read_support %>%
   ggplot() +
   aes(x = factor(quant, levels = c(3,2,1), labels = c("Common", "Middling", "Rare")), y = reads) +
