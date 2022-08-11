@@ -134,6 +134,10 @@ DV10_homolsurv <-  readRDS("figures/robj/DV10_homol_fig_cutoff60.RDS")
 
 DV10_homolcoxme <- readRDS("figures/robj/DV10_coxme_fig.RDS")
 
+DV10_randomcoxme <- readRDS("figures/robj/DV10_random_coxme_fig.RDS")
+
+DV10_randomsurv <- readRDS("figures/robj/DV10_random_strat_survival.RDS")
+
 DV10_homolvrandom <- readRDS("figures/robj/DV10_homolvrandom_survival.RDS")
 
 DV10_homolrandom_Asx <- readRDS("figures/robj/DV10_homolvrandom_survival_Asx.RDS")
@@ -792,6 +796,7 @@ Combined_randomcoxme$data$variable <- factor(Combined_randomcoxme$data$variable,
 Combined_random_strat <- ggarrange(Combined_randomsurv +
             geom_vline(xintercept = 60, linetype = "dotted") +
             scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
+            labs(title = "Time to random reinfection") +
             theme_bw() +
             theme(plot.title = element_text(hjust = 0.5), legend.position = "bottom"),
             Combined_randomcoxme +
@@ -810,7 +815,7 @@ Combined_homolcoxme$data$label <- factor(Combined_homolcoxme$data$label, levels 
 Combined_homol_strat <- ggarrange(ggarrange(Combined_homolsurv$plot +
             geom_vline(xintercept = 60, linetype = "dotted") +
             scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
-            labs(title = "") +
+            labs(title = "Time to homologous reinfection") +
             theme_bw() +
             theme(plot.title = element_text(hjust = 0.5), legend.position = "none"),
             NULL,
@@ -823,27 +828,148 @@ Combined_homol_strat <- ggarrange(ggarrange(Combined_homolsurv$plot +
           ncol = 1,
           heights = c(3,1))
 
+#remove rectangle from Combined_homolvrandom
+Combined_homolvrandom$layers[[4]] <- NULL
+Combined_homolrandom_Asx$layers[[4]] <- NULL
+Combined_homolrandom_Sx$layers[[4]] <- NULL
 
-combined_combined <- ggarrange(combined_moi_alt +
-            labs(title = "")+
-              theme(legend.position = "bottom"),
-          Combined_homolvrandom +
-            labs(title = "") +
+combined_allhomolrandom <- ggarrange(Combined_homolvrandom +
+            labs(title = " \nAll episodes", x = " ") +
             geom_vline(xintercept = 60, linetype = "dotted") +
             scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
-            theme(plot.title = element_text(hjust = 0.5), legend.position = "bottom"),
-          Combined_homol_strat+
-            labs(title = ""),
-          Combined_random_strat+
-            labs(title = ""),
-          ncol = 2,
-          nrow = 2,
-          heights = c(1,1.2),
-          labels = c("A","B","C","D"),
-          align = "hv")
+            theme(plot.title = element_text(hjust = 0.5)),
+          Combined_homolrandom_Asx +
+            labs(title = " \nAsymptomatic episodes", y = " ") +
+            geom_vline(xintercept = 60, linetype = "dotted") +
+            scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
+            theme(plot.title = element_text(hjust = 0.5)),
+          Combined_homolrandom_Sx +
+            labs(title = " \nSymptomatic episodes", x = " ", y = " ") +
+            geom_vline(xintercept = 60, linetype = "dotted") +
+            scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
+            theme(plot.title = element_text(hjust = 0.5)),
+          nrow = 1,
+          widths = c(1,1,1),
+          common.legend = TRUE,
+          legend = "bottom",
+          labels = c("D", "E", "F"),
+          label.y = 1.01)
 
-ggsave(plot = combined_combined, "figures/combined_fig.png", width = 10, height = 10)
+
+
+
+
+combined_top <- ggarrange(ggarrange(combined_moi_alt +
+            labs(title = "")+
+              theme(legend.position = "bottom"),
+            NULL,
+            ncol = 1,
+            heights = c(1,0.3)),
+            Combined_homol_strat,
+          Combined_random_strat,
+          ncol = 3,
+          nrow = 1,
+          widths = c(1,1,1),
+          labels = c("A","B","C"))
+
+combined_combined <- ggarrange(combined_top,
+                               NULL,
+                               combined_allhomolrandom,
+                               nrow = 3,
+                               heights = c(1.5,0.1,1.1))
+
+ggsave(plot = combined_combined, "figures/combined_fig.png", width = 13, height = 10)
 
 
 ```
 
+# DV10 figure
+```{r}
+
+#random strat fig
+
+DV10_randomcoxme$data$variable <- factor(DV10_randomcoxme$data$variable, levels = c("Symptomatic", "Mosquitoes > 50", "Type prevalence", "Male", 
+"Age 5-15", "Age > 15"))
+
+DV10_random_strat <- ggarrange(DV10_randomsurv +
+            geom_vline(xintercept = 60, linetype = "dotted") +
+            scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
+            labs(title = "Time to random reinfection") +
+            theme_bw() +
+            theme(plot.title = element_text(hjust = 0.5), legend.position = "bottom"),
+            DV10_randomcoxme +
+              scale_x_continuous(trans = "log", breaks = c(0.5,1,2), limits = c(0.4,4)),
+            ncol = 2,
+            widths = c(1,1))
+            
+            
+
+
+#homol strat fig
+
+DV10_homolcoxme$data$label <- factor(DV10_homolcoxme$data$label, levels = c("Age >15", "Age 5 - 15", "Male", "Type prevalence", "Mosquitoes > 50", 
+"Symptomatic"))
+
+DV10_homol_strat <- ggarrange(ggarrange(DV10_homolsurv$plot +
+            geom_vline(xintercept = 60, linetype = "dotted") +
+            scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
+            labs(title = "Time to homologous reinfection") +
+            theme_bw() +
+            theme(plot.title = element_text(hjust = 0.5), legend.position = "none"),
+            NULL,
+          DV10_homolsurv$table +
+            theme(plot.title = element_text(size = 12)),
+          heights = c(1,-0.02,0.2),
+          ncol = 1),
+          DV10_homolcoxme +
+            scale_x_continuous(trans = "log", breaks = c(0.5,1,2), limits = c(0.35,3)),
+          ncol = 2,
+          widths = c(1,1))
+
+#remove rectangle from DV10_homolvrandom
+DV10_homolvrandom$layers[[4]] <- NULL
+DV10_homolrandom_Asx$layers[[4]] <- NULL
+DV10_homolrandom_Sx$layers[[4]] <- NULL
+
+DV10_allhomolrandom <- ggarrange(DV10_homolvrandom +
+            labs(title = " \nAll episodes", x = " ") +
+            geom_vline(xintercept = 60, linetype = "dotted") +
+            scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
+            theme(plot.title = element_text(hjust = 0.5)),
+          DV10_homolrandom_Asx +
+            labs(title = " \nAsymptomatic episodes", y = " ") +
+            geom_vline(xintercept = 60, linetype = "dotted") +
+            scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
+            theme(plot.title = element_text(hjust = 0.5)),
+          DV10_homolrandom_Sx +
+            labs(title = " \nSymptomatic episodes", x = " ", y = " ") +
+            geom_vline(xintercept = 60, linetype = "dotted") +
+            scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
+            theme(plot.title = element_text(hjust = 0.5)),
+          nrow = 1,
+          widths = c(1,1,1),
+          common.legend = TRUE,
+          legend = "bottom",
+          labels = c("C", "D", "E"),
+          label.y = 1.01)
+
+
+
+DV10_top <- ggarrange(DV10_homol_strat,
+                      NULL,
+          DV10_random_strat,
+          ncol = 3,
+          nrow = 1,
+          widths = c(1,0.1,1),
+          labels = c("A","", "B"))
+
+DV10_combined <- ggarrange(DV10_top,
+                               NULL,
+                               DV10_allhomolrandom,
+                               nrow = 3,
+                               heights = c(1,0.1,1.1))
+
+ggsave(plot = DV10_combined, "figures/DV10_fig.png", width = 15, height = 10)
+
+
+```
