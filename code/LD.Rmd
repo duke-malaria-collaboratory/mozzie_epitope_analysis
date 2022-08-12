@@ -223,7 +223,15 @@ Q_star_df <- as.data.frame(Q_star_matrix) %>%
          Th3R_match = ifelse(aa_1 %in% c(352,357,359,361) & aa_2 %in% c(352,357,359,361), 1,0))
 
 
-
+Q_star_df %>%
+  pivot_longer(ends_with("match"), names_to = "epitope", values_to = "match") %>%
+  mutate(epitope = substr(epitope, 1,4)) %>%
+  filter(aa_1 %in% c(298,299,301,303,318,321,322,324,352,357,359,361) & aa_2 %in% c(298,299,301,303,318,321,322,324,352,357,359,361)) %>%
+  ggplot(aes(x = factor(match, levels = c(0,1), labels = c("Within cluster", "Between clusters")), y = Q_star)) +
+  geom_boxplot() +
+  facet_wrap(~epitope) +
+  labs(x = "Position pairs", y = "Q*") +
+  theme_bw()
 
 ```
 
