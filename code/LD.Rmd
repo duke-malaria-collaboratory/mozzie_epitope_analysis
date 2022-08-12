@@ -1,0 +1,229 @@
+---
+title: "LD"
+author: "Christine Markwalter"
+date: '2022-08-05'
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(dpi=300)
+knitr::opts_chunk$set(message = FALSE)
+grDevices::pdf.options(useDingbats = FALSE)
+library(Biostrings)
+library(tidyverse)
+library(ggpmisc)
+library(lubridate)
+
+
+library(ggfortify)
+
+library(arsenal)
+
+library(ggpubr)
+```
+
+
+# Options 
+
+AMA or CSP
+```{r,echo=T}
+# Select which gene to analyze CSP or AMA
+#AMA
+# AMA<-TRUE
+# shift <-
+
+#CSP
+AMA<-FALSE
+shift <- 877
+```
+
+
+# Load in sequence data
+
+CSP
+```{r, warning=F,message=F}
+
+seqs <- Biostrings::readDNAStringSet("data/original/spat21_CSP_uniqueSeqs_final_censored.fasta")
+
+seqs <- reverseComplement(seqs)
+
+
+haplotypes<-read.csv("data/original/spat21_csp_summarized_haplotype_list_31DEC2019.csv")
+```
+ 
+ AMA
+```{r, warning=F,message=F,eval=AMA}
+
+seqs <- Biostrings::readDNAStringSet("data/original/spat21_AMA_uniqueSeqs_final_censored.fasta")
+
+haplotypes<-read.csv("data/original/spat21_ama_summarized_haplotype_list_31DEC2019.csv")
+
+```
+
+```{r}
+head(seqs)
+head(haplotypes)
+```
+
+Start of the haplotype analysis with focus on SNPs and AA substitutions
+
+# Filter to humans and merge sequences
+
+```{r, warning=F,message=F}
+haplotypes = haplotypes %>%
+  filter(!(str_detect(sample_name_dbs,"H")) & !(str_detect(sample_name_dbs,"A")) | sample_name_dbs == "K14-170717-1A-R") #might want to adjust to make more robust filtering
+
+#make list of haplotypes found in human samples
+haplotypelist=haplotypes%>%
+  separate_rows(haplotype_list) %>%
+  separate(haplotype_list, into = c(NA, "HType"), sep = 1, remove = FALSE, ) %>%
+  mutate(Seq = paste0("Seq", HType))
+
+#merge sequences with samples
+seqs_df <- as.data.frame(seqs) %>%
+  rownames_to_column(var = "Seq") %>%
+  rename(sequence = x)
+
+hap_occurences <- haplotypelist %>%
+  left_join(seqs_df)
+
+```
+
+
+# Identifying variant positions
+Will filter only to positions with major allele frequencies <0.98
+```{r}
+DNAseqmatrix <- as.data.frame(consensusMatrix(seqs, as.prob = TRUE))
+variantpos<-DNAseqmatrix %>%
+  #Convert column from factor to numeric
+  mutate_all(~as.numeric(as.character(.))) %>%
+  #select only columns whose max value is less than 0.98 (similar to Early et al 2018 fig 4)
+  select_if(~max(., na.rm = TRUE) < 1)
+colnames(variantpos) <- sub("V", "", colnames(variantpos))
+
+#colnames(variantpos) <- paste0(as.numeric(sub("V", "", colnames(variantpos)))+shift, " (", ceiling((as.numeric(sub("V", "", colnames(variantpos)))+shift)/3), ")")
+
+poslist<-names(variantpos)
+
+
+#Make every variant  position into a column and append it to the sequence dataframe
+for(i in as.numeric(poslist)){
+  pos<-as.data.frame(subseq(seqs,i,i)) #takes first position for all 298 sequences
+  pos[,1]<-as.factor(pos[,1])
+  colnames(pos)<- paste(i)
+  seqs_df[ , ncol(seqs_df) + 1] <- pos 
+}
+
+
+#Merge with haplotype occurence data
+hap_occurences_merged <- hap_occurences %>%
+  left_join(seqs_df)
+
+#Allele frequency matrix
+allele_freq <- hap_occurences_merged %>%
+  mutate(unq_id = paste0(sample_name_dbs, "_", haplotype_list)) %>%
+  select(-c(1:7)) %>%
+  pivot_longer(-unq_id, names_to = "position", values_to = "allele") %>%
+  group_by(position, allele) %>%
+  summarise(freq = n()/nrow(hap_occurences_merged)) %>%
+  ungroup() %>%
+  complete(position, allele) %>%
+  replace(is.na(.), 0) %>%
+  arrange(as.numeric(position)) %>%
+  pivot_wider(names_from = position, values_from = freq) %>%
+  column_to_rownames(var = "allele") %>%
+  select_if(~max(., na.rm = TRUE) < 0.98) %>%
+  as.matrix()
+
+#Making a matrix of occurences
+hap_occurence_matrix <- hap_occurences_merged %>%
+  mutate(unq_id = paste0(sample_name_dbs, "_", haplotype_list)) %>%
+  select(unq_id, colnames(allele_freq)) %>%
+  column_to_rownames(var = "unq_id") %>%
+  as.matrix()
+
+```
+
+
+# Dij
+Working through a single example first; let's calculate Dij for the first two variant positions
+```{r message=FALSE, warning=FALSE}
+
+# Generate a dataframe with all possible haplotypes
+allele_combinations <- data.frame(expand.grid(c("A", "T", "C", "G"),c("A", "T", "C", "G")))  
+
+# Generate empty matrix with variant positions as row/column names
+Q_star_matrix <- matrix(ncol = ncol(allele_freq), nrow = ncol(allele_freq))
+colnames(Q_star_matrix) <- paste0(as.numeric(colnames(allele_freq))+shift, " (", ceiling((as.numeric(colnames(allele_freq))+shift)/3), ")")
+rownames(Q_star_matrix) <- paste0(as.numeric(colnames(allele_freq))+shift, " (", ceiling((as.numeric(colnames(allele_freq))+shift)/3), ")")
+
+for(i in 1:(nrow(Q_star_matrix)-1)) {
+  for(j in (i+1):ncol(Q_star_matrix)) {
+    pre_Q <- hap_occurence_matrix %>%
+      data.frame() %>%
+      select(all_of(c(i,j))) %>%
+      rename("Var1" = 1,  "Var2" = 2) %>%
+      group_by(Var1, Var2) %>%
+      summarise(n = n()) %>%
+      right_join(allele_combinations) %>%
+      ungroup() %>%
+      mutate_all(~replace(., is.na(.), 0)) %>%
+      mutate(hap_freq = n/sum(n),
+             Var1_allelefreq = allele_freq[Var1, i],
+             Var2_allelefreq = allele_freq[Var2, j],
+             Dij = hap_freq - (Var1_allelefreq*Var2_allelefreq),
+             Dij_sqared = Dij ** 2,
+             pre_Q = Dij_sqared/(Var1_allelefreq*Var2_allelefreq),
+             k = n_distinct(Var1_allelefreq) - 1, #subtract 1 because we are counting 0's
+             l = n_distinct(Var2_allelefreq) -1) %>%
+      mutate_all(~replace(., is.na(.), 0))
+    
+    Q <- sum(pre_Q$pre_Q)
+    Q_star <- Q/((mean(pre_Q$k) - 1)*(mean(pre_Q$l) - 1))
+    
+    Q_star_matrix[i,j] <- Q_star
+  }
+}
+
+
+
+```
+
+
+
+# Plot
+
+```{r}
+library(LDheatmap)
+
+library(viridis)
+
+distances <-as.numeric(sub(" ", "", unlist(strsplit(colnames(Q_star_matrix), " .*"))))
+
+
+MyHeatmap <- LDheatmap(Q_star_matrix, genetic.distances = distances, color= mako(50), flip = TRUE, title = NULL, geneMapLabelX = NA, geneMapLabelY = NA)
+
+
+
+
+
+```
+
+
+# Comparing LD
+We want to know whether there is more LD within the clusters/positions we chose
+```{r eval = !AMA}
+Q_star_df <- as.data.frame(Q_star_matrix) %>%
+  rownames_to_column(var = "pos1") %>%
+  pivot_longer(-pos1, names_to = "pos2", values_to = "Q_star") %>%
+  mutate(aa_1 = substr(pos1, str_length(pos1) - 3, str_length(pos1) - 1),
+         aa_2 = substr(pos2, str_length(pos2) - 3, str_length(pos2) - 1),
+         DV10_match = ifelse(aa_1 %in% c(298,299,301,303) & aa_2 %in% c(298,299,301,303), 1,0),
+         Th2R_match = ifelse(aa_1 %in% c(318,321,322,324) & aa_2 %in% c(318,321,322,324), 1,0),
+         Th3R_match = ifelse(aa_1 %in% c(352,357,359,361) & aa_2 %in% c(352,357,359,361), 1,0))
+
+
+
+
+```
+
