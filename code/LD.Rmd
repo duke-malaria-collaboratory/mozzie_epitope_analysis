@@ -29,12 +29,14 @@ AMA or CSP
 ```{r,echo=T}
 # Select which gene to analyze CSP or AMA
 #AMA
-# AMA<-TRUE
-# shift <-
+currentgene <- "AMA"
+AMA<-TRUE
+shift <- 457
 
 #CSP
-AMA<-FALSE
-shift <- 877
+# currentgene <- "CSP"
+# AMA<-FALSE
+# shift <- 877
 ```
 
 
@@ -101,7 +103,6 @@ variantpos<-DNAseqmatrix %>%
   select_if(~max(., na.rm = TRUE) < 1)
 colnames(variantpos) <- sub("V", "", colnames(variantpos))
 
-#colnames(variantpos) <- paste0(as.numeric(sub("V", "", colnames(variantpos)))+shift, " (", ceiling((as.numeric(sub("V", "", colnames(variantpos)))+shift)/3), ")")
 
 poslist<-names(variantpos)
 
@@ -200,10 +201,7 @@ library(viridis)
 
 distances <-as.numeric(sub(" ", "", unlist(strsplit(colnames(Q_star_matrix), " .*"))))
 
-
-MyHeatmap <- LDheatmap(Q_star_matrix, genetic.distances = distances, color= mako(50), flip = TRUE, title = NULL, geneMapLabelX = NA, geneMapLabelY = NA)
-
-
+LDheatmap(Q_star_matrix, genetic.distances = distances, color= mako(50), flip = TRUE, title = NULL, geneMapLabelX = NA, geneMapLabelY = NA)
 
 
 
@@ -223,15 +221,60 @@ Q_star_df <- as.data.frame(Q_star_matrix) %>%
          Th3R_match = ifelse(aa_1 %in% c(352,357,359,361) & aa_2 %in% c(352,357,359,361), 1,0))
 
 
-Q_star_df %>%
+Q_star_df_long <- Q_star_df %>%
   pivot_longer(ends_with("match"), names_to = "epitope", values_to = "match") %>%
   mutate(epitope = substr(epitope, 1,4)) %>%
-  filter(aa_1 %in% c(298,299,301,303,318,321,322,324,352,357,359,361) & aa_2 %in% c(298,299,301,303,318,321,322,324,352,357,359,361)) %>%
-  ggplot(aes(x = factor(match, levels = c(0,1), labels = c("Within cluster", "Between clusters")), y = Q_star)) +
+  filter(aa_1 %in% c(298,299,301,303,318,321,322,324,352,357,359,361) | aa_2 %in% c(298,299,301,303,318,321,322,324,352,357,359,361))
+
+Cluster_plot <- Q_star_df_long %>%
+  ggplot(aes(x = factor(match, levels = c(0,1), labels = c("Outside cluster", "Within cluster")), y = Q_star)) +
   geom_boxplot() +
   facet_wrap(~epitope) +
   labs(x = "Position pairs", y = "Q*") +
   theme_bw()
 
+Cluster_plot
+
+wilcox.test(Q_star_df_long$Q_star[Q_star_df_long$epitope == "DV10" & Q_star_df_long$match == 1],Q_star_df_long$Q_star[Q_star_df_long$epitope == "DV10" & Q_star_df_long$match == 0])
+
+wilcox.test(Q_star_df_long$Q_star[Q_star_df_long$epitope == "Th2R" & Q_star_df_long$match == 1],Q_star_df_long$Q_star[Q_star_df_long$epitope == "Th2R" & Q_star_df_long$match == 0])
+
+
+wilcox.test(Q_star_df_long$Q_star[Q_star_df_long$epitope == "Th3R" & Q_star_df_long$match == 1],Q_star_df_long$Q_star[Q_star_df_long$epitope == "Th3R" & Q_star_df_long$match == 0])
+
+Q_star_df %>% select(pos1) %>% distinct()
+
 ```
 
+
+
+AMA
+```{r eval = AMA}
+Q_star_df <- as.data.frame(Q_star_matrix) %>%
+  rownames_to_column(var = "pos1") %>%
+  pivot_longer(-pos1, names_to = "pos2", values_to = "Q_star") %>%
+  mutate(aa_1 = substr(pos1, str_length(pos1) - 3, str_length(pos1) - 1),
+         aa_2 = substr(pos2, str_length(pos2) - 3, str_length(pos2) - 1),
+         c1L_match = ifelse(aa_1 %in% c(197,200,201,206) & aa_2 %in% c(197,200,201,206), 1,0))
+
+
+Q_star_df_long <- Q_star_df %>%
+  pivot_longer(ends_with("match"), names_to = "epitope", values_to = "match") %>%
+  mutate(epitope = substr(epitope, 1,3)) %>%
+  filter(aa_1 %in% c(197,200,201,206) | aa_2 %in% c(197,200,201,206))
+
+Cluster_plot <- Q_star_df_long %>%
+  ggplot(aes(x = factor(match, levels = c(0,1), labels = c("Outside cluster", "Within cluster")), y = Q_star)) +
+  geom_boxplot() +
+  facet_wrap(~epitope) +
+  labs(x = "Position pairs", y = "Q*") +
+  theme_bw()
+
+Cluster_plot
+
+wilcox.test(Q_star_df_long$Q_star[Q_star_df_long$epitope == "c1L" & Q_star_df_long$match == 1],Q_star_df_long$Q_star[Q_star_df_long$epitope == "c1L" & Q_star_df_long$match == 0])
+
+Q_star_df %>% select(pos1) %>% distinct()
+
+```
+rmarkdown::render("C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/mozzie_epitope_analysis/code/LD.Rmd", output_file= paste0(currentgene, "_LD_", format(now(), "%Y%m%d_%H%M%S_"), ".html"), encoding = 'UTF-8', knit_root_dir = "C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/mozzie_epitope_analysis")
