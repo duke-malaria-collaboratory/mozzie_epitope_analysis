@@ -950,24 +950,24 @@ DV10_allhomolrandom <- ggarrange(DV10_homolvrandom +
           widths = c(1,1,1),
           common.legend = TRUE,
           legend = "bottom",
-          labels = c("C", "D", "E"),
+          labels = c("A", "", ""),
           label.y = 1.01)
 
 
 
-DV10_top <- ggarrange(DV10_homol_strat,
+DV10_bottom <- ggarrange(DV10_random_strat,
                       NULL,
-          DV10_random_strat,
+          DV10_homol_strat,
           ncol = 3,
           nrow = 1,
           widths = c(1,0.1,1),
-          labels = c("A","", "B"))
+          labels = c("B","", "C"))
 
-DV10_combined <- ggarrange(DV10_top,
+DV10_combined <- ggarrange(DV10_allhomolrandom,
                                NULL,
-                               DV10_allhomolrandom,
+                               DV10_bottom,
                                nrow = 3,
-                               heights = c(1,0.1,1.1))
+                               heights = c(1.1,0.1,1))
 
 ggsave(plot = DV10_combined, "figures/DV10_fig.png", width = 15, height = 10)
 
