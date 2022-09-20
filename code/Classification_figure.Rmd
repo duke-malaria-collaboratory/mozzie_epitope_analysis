@@ -177,5 +177,57 @@ classification_plot
 ggsave(plot = classification_plot, "figures/mock_classification_fig_a.png", width = 8, height = 4)
 
 ```
+# Classification plot only PCR
+```{r}
+
+mock_eg %>% 
+  mutate(label = recode(label, "**PCR**" = "Pf infection")) %>%
+  ggplot(aes(y = 1))+
+  ggstance::geom_linerangeh(aes(y = 1,
+                                xmin = mdy(x),
+                                xmax = mdy(xend),
+                                color = label),
+                            size = 2, alpha = 0.9,
+                            position = ggstance::position_dodgev(height = 0.5)) +
+  geom_point(aes(x = mdy(x), color = label), size = 4, alpha = 1, position = ggstance::position_dodgev(height = 0.5)) +
+  geom_point(aes(x = mdy(xend), color = label), size = 4, alpha = 1, position = ggstance::position_dodgev(height = 0.5))+
+  scale_color_manual(values = rev(c("black",'#7fc97f','#beaed4','tan2','gold','#386cb0'))) +
+  guides(color = guide_legend(reverse=TRUE, nrow = 1))+
+  geom_rect(aes(xmin = ymd("2018-09-01"), xmax = ymd("2018-12-01"), ymin = -Inf, ymax = Inf), fill = "lightgrey")+
+  geom_text(data = mock_eg %>% filter(str_detect(label, "PCR")), aes(label = TTR, x = ymd("2018-10-15")), alpha = 1, size = 3)+
+  labs(title = "Days to reinfection") +
+  scale_y_continuous(limits = c(0,2)) +
+  scale_x_date(limits = c(ymd("2017-04-25"), ymd("2018-12-01")), expand = c(0,0), date_breaks = "100 days", minor_breaks = NULL, date_labels = c("0", "100", "200","300", "400", " "))+
+  facet_grid(person~., scales = "free", switch = "y") +
+  labs(y = "", x = "Time (Days)" , color = "")+
+  theme_bw() +
+  theme(legend.position = "bottom", plot.title = element_text(size = 10, hjust = 1), strip.background = element_rect(fill = "white"),  axis.ticks.x = element_blank(), axis.ticks.y = element_blank(), axis.text.y = element_blank(), panel.grid.major.y = element_blank(), panel.grid.minor.y = element_blank())
+
+ggsave("figures/mock_classification_overall.png", width = 8, height = 4)
+
+mock_eg %>% 
+  filter(label != "**PCR**") %>%
+  ggplot(aes(y = 1))+
+  ggstance::geom_linerangeh(aes(xmin = mdy(x),
+                                xmax = mdy(xend),
+                                color = label),
+                            size = 2, alpha = 0.9) +
+  geom_point(aes(x = mdy(x), color = label), size = 4, alpha = 1) +
+  geom_point(aes(x = mdy(xend), color = label), size = 4, alpha = 1)+
+  scale_color_manual(values = rev(c("black",'#7fc97f','#beaed4','tan2','gold','#386cb0'))) +
+  guides(color = "none")+
+  geom_rect(aes(xmin = ymd("2018-09-01"), xmax = ymd("2018-12-01"), ymin = -Inf, ymax = Inf), fill = "lightgrey")+
+  geom_text(aes(label = TTR, x = ymd("2018-10-15")), alpha = 1, size = 3)+
+  labs(title = "Days to          \nhomologous reinfection") +
+  scale_y_continuous(limits = c(0,2)) +
+  scale_x_date(limits = c(ymd("2017-04-25"), ymd("2018-12-01")), expand = c(0,0), date_breaks = "100 days", minor_breaks = NULL, date_labels = c("0", "100", "200","300", "400", " "))+
+  ggh4x::facet_nested(person + fct_rev(label)~., scales = "free", switch = "y", strip = ggh4x::strip_nested(size = "variable")) +
+  labs(y = "", x = "Time (Days)" , color = "")+
+  theme_bw() +
+  theme(legend.position = "bottom", plot.title = element_text(size = 10, hjust = 1), strip.background = element_rect(fill = "white"),  axis.ticks.x = element_blank(), axis.ticks.y = element_blank(), axis.text.y = element_blank(), panel.grid.major.y = element_blank(), panel.grid.minor.y = element_blank())
+
+ggsave("figures/mock_classification_homologous.png", width = 12, height = 6)
+
+```
 
 
