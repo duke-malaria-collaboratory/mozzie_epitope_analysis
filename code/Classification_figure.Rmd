@@ -16,99 +16,6 @@ library(ggpubr)
 ```
 
 
-<!-- # Load data -->
-<!-- ```{r} -->
-<!-- all_classified <- readRDS("data/processed/all_infections_classified.RDS") -->
-<!-- cd4_classified <- readRDS("data/processed/cd4_allinfections_classified.RDS") -->
-<!-- ``` -->
-
-
-<!-- # Filter to a few examples -->
-<!-- ```{r} -->
-
-<!-- eg_classified <- all_classified %>% -->
-<!--   filter(unq_memID %in% c("M15_5", "M12_1", "K12_2", "M09_2")) -->
-
-<!-- eg_cd4 <- cd4_classified %>% -->
-<!--   filter(unq_memID %in% c("M15_5", "M12_1", "K12_2", "M09_2")) -->
-
-<!-- ``` -->
-
-
-
-<!-- # Trying with just basic data -->
-<!-- ```{r} -->
-
-<!-- overall_eg <- eg_classified %>% -->
-<!--   arrange(unq_memID, dmy(sample_id_date)) %>% -->
-<!--   filter(StartMiddleEnd %in% c("start", "end", "start+end")) %>% -->
-<!--   mutate(x = ifelse(StartMiddleEnd == "end", lag(sample_id_date,1),  -->
-<!--                     ifelse(StartMiddleEnd == "start+end", sample_id_date, NA)), -->
-<!--          xend = ifelse(StartMiddleEnd %in% c("start+end", "end"), sample_id_date, NA)) %>% -->
-<!--   filter(StartMiddleEnd %in% c("start+end", "end")) %>% -->
-<!--   select(unq_memID, sample_id_date, symptomatic_status, StartMiddleEnd, x, xend) %>% -->
-<!--   mutate(AAs = "A", mem_AA = paste0(unq_memID, "-", AAs), label = "PCR-positive") -->
-
-
-
-<!-- overall_eg %>% ggplot(aes(y = unq_memID))+ -->
-<!--   geom_dumbbell(aes(x = dmy(x), xend = dmy(xend)),size=3, color="#e3e2e1", -->
-<!--                 colour_x = "#e3e2e1") + -->
-<!--   geom_point(aes(x = dmy(xend), color = symptomatic_status), size = 4) + -->
-<!--   scale_color_manual(values = c("#e3e2e1", "darkred"))+ -->
-<!--   theme_minimal() -->
-<!-- ``` -->
-
-<!-- # With epitope types -->
-<!-- ```{r, warning=FALSE, message=FALSE} -->
-<!-- epitope_eg <- eg_cd4 %>% -->
-<!--   arrange(dmy(sample_id_date)) %>% -->
-<!--   select(unq_memID, sample_id_date, AAs, samplenumber, toNext, symptomatic_status) %>% -->
-<!--   group_by(unq_memID, AAs) %>% #use ToNext to define start, start+end, and end -->
-<!--   mutate(StartMiddleEnd = ifelse(is.na(toNext), "start+end", -->
-<!--                                  ifelse(toNext == "uncleared" & samplenumber == min(samplenumber), "start", -->
-<!--                                         ifelse(toNext == "uncleared" & lag(toNext, 1) == "uncleared", "middle", -->
-<!--                                         ifelse(toNext == "uncleared" & as.numeric(lag(toNext,1))> 0, "start", -->
-<!--                                                ifelse(as.numeric(toNext) > 0 & samplenumber == min(samplenumber), "start+end", -->
-<!--                                                       ifelse(as.numeric(toNext) > 0 & lag(toNext,1) != "uncleared", "start+end", -->
-<!--                                                              ifelse(as.numeric(toNext) > 0 & lag(toNext,1) == "uncleared", "end",NA)))))))) %>% -->
-<!--   filter(StartMiddleEnd %in% c("start", "end", "start+end")) %>% -->
-<!--   mutate(x = ifelse(StartMiddleEnd == "end", lag(sample_id_date,1),  -->
-<!--                     ifelse(StartMiddleEnd == "start+end", sample_id_date, NA)), -->
-<!--          xend = ifelse(StartMiddleEnd %in% c("start+end", "end"), sample_id_date, NA)) %>% -->
-<!--   filter(StartMiddleEnd %in% c("start+end", "end")) %>% -->
-<!--   mutate(mem_AA = paste0(unq_memID, "-", AAs)) %>% -->
-<!--   select(unq_memID, sample_id_date, symptomatic_status, StartMiddleEnd, x, xend, AAs, mem_AA) %>% -->
-<!--   mutate(label = AAs) -->
-
-
-<!-- summary_eg <- overall_eg %>% -->
-<!--   rbind(epitope_eg) %>% -->
-<!--   filter(mem_AA %in% c("M15_5-KKTQ", "M15_5-KKTK", "M15_5-KKIQ", "M15_5-A",  -->
-<!-- "M12_1-QKTK", "M12_1-A", "M09_2-QKTQ", "M09_2-QKTK", "M09_2-KKIQ", "M09_2-A", "K12_2-QKTQ", "K12_2-QKKQ", "K12_2-KKIQ", "K12_2-A")) %>% -->
-<!--   arrange(mem_AA)  -->
-
-<!-- summary_eg$label <- factor(summary_eg$label, levels = c("QKTQ", "QKTK", "QKKQ", "KKTQ", "KKTK", "KKIQ", "PCR-positive"), labels = c("Epitope 6", "Epitope 5", "Epitope 4", "Epitope 3", "Epitope 2", "Epitope 1", "PCR-positive")) -->
-
-<!-- summary_eg$unq_memID <- factor(summary_eg$unq_memID, levels = c("K12_2", "M09_2", "M12_1", "M15_5"), labels = c("Person 1", "Person 2", "Person 3", "Person 4")) -->
-
-
-<!-- summary_fig <- summary_eg %>%  -->
-<!--   ggplot(aes(y = label))+ -->
-<!--   geom_dumbbell(aes(x = dmy(x), xend = dmy(xend)),size=2, size_x = 4, color="#87B4C0", -->
-<!--                 colour_x = "#87B4C0") + -->
-<!--   geom_point(aes(x = dmy(xend), color = symptomatic_status), size = 4) + -->
-<!--   scale_color_manual(values = c("#87B4C0", "#CE5B3B"), name = "")+ -->
-<!--   facet_grid(unq_memID~., scales = "free") + -->
-<!--   labs(y = "")+ -->
-<!--   theme_bw() + -->
-<!--   theme(legend.position = "bottom", axis.title.x = element_blank()) -->
-
-
-<!-- summary_fig -->
-
-<!-- ``` -->
-
 # Mock data
 ```{r}
 mock_eg <- read_csv("data/processed/mock_classification_fig.csv")
@@ -178,62 +85,9 @@ classification_plot
 ggsave(plot = classification_plot, "figures/mock_classification_fig_a.png", width = 8, height = 4)
 
 ```
-# Classification plot only PCR
-```{r}
-
-mock_eg %>% 
-  mutate(label = recode(label, "**PCR**" = "Pf infection")) %>%
-  ggplot(aes(y = 1))+
-  ggstance::geom_linerangeh(aes(y = 1,
-                                xmin = mdy(x),
-                                xmax = mdy(xend),
-                                color = label),
-                            size = 2, alpha = 0.9,
-                            position = ggstance::position_dodgev(height = 0.5)) +
-  geom_point(aes(x = mdy(x), color = label), size = 4, alpha = 1, position = ggstance::position_dodgev(height = 0.5)) +
-  geom_point(aes(x = mdy(xend), color = label), size = 4, alpha = 1, position = ggstance::position_dodgev(height = 0.5))+
-  scale_color_manual(values = rev(c("black",'#7fc97f','#beaed4','tan2','gold','#386cb0'))) +
-  guides(color = guide_legend(reverse=TRUE, nrow = 1))+
-  geom_rect(aes(xmin = ymd("2018-09-01"), xmax = ymd("2018-12-01"), ymin = -Inf, ymax = Inf), fill = "lightgrey")+
-  geom_text(data = mock_eg %>% filter(str_detect(label, "PCR")), aes(label = TTR, x = ymd("2018-10-15")), alpha = 1, size = 3)+
-  labs(title = "Days to reinfection") +
-  scale_y_continuous(limits = c(0,2)) +
-  scale_x_date(limits = c(ymd("2017-04-25"), ymd("2018-12-01")), expand = c(0,0), date_breaks = "100 days", minor_breaks = NULL, date_labels = c("0", "100", "200","300", "400", " "))+
-  facet_grid(person~., scales = "free", switch = "y") +
-  labs(y = "", x = "Time (Days)" , color = "")+
-  theme_bw() +
-  theme(legend.position = "bottom", plot.title = element_text(size = 10, hjust = 1), strip.background = element_rect(fill = "white"),  axis.ticks.x = element_blank(), axis.ticks.y = element_blank(), axis.text.y = element_blank(), panel.grid.major.y = element_blank(), panel.grid.minor.y = element_blank())
-
-ggsave("figures/mock_classification_overall.png", width = 8, height = 4)
-
-mock_eg %>% 
-  filter(label != "**PCR**") %>%
-  ggplot(aes(y = 1))+
-  ggstance::geom_linerangeh(aes(xmin = mdy(x),
-                                xmax = mdy(xend),
-                                color = label),
-                            size = 2, alpha = 0.9) +
-  geom_point(aes(x = mdy(x), color = label), size = 4, alpha = 1) +
-  geom_point(aes(x = mdy(xend), color = label), size = 4, alpha = 1)+
-  scale_color_manual(values = rev(c("black",'#7fc97f','#beaed4','tan2','gold','#386cb0'))) +
-  guides(color = "none")+
-  geom_rect(aes(xmin = ymd("2018-09-01"), xmax = ymd("2018-12-01"), ymin = -Inf, ymax = Inf), fill = "lightgrey")+
-  geom_text(aes(label = TTR, x = ymd("2018-10-15")), alpha = 1, size = 3)+
-  labs(title = "Days to          \nhomologous reinfection") +
-  scale_y_continuous(limits = c(0,2)) +
-  scale_x_date(limits = c(ymd("2017-04-25"), ymd("2018-12-01")), expand = c(0,0), date_breaks = "100 days", minor_breaks = NULL, date_labels = c("0", "100", "200","300", "400", " "))+
-  ggh4x::facet_nested(person + fct_rev(label)~., scales = "free", switch = "y", strip = ggh4x::strip_nested(size = "variable")) +
-  labs(y = "", x = "Time (Days)" , color = "")+
-  theme_bw() +
-  theme(legend.position = "bottom", plot.title = element_text(size = 10, hjust = 1), strip.background = element_rect(fill = "white"),  axis.ticks.x = element_blank(), axis.ticks.y = element_blank(), axis.text.y = element_blank(), panel.grid.major.y = element_blank(), panel.grid.minor.y = element_blank())
-
-ggsave("figures/mock_classification_homologous.png", width = 12, height = 6)
-
-```
 
 
-
-# Version 3
+# Revised
 ```{r}
 pcr_df <- mock_eg %>% 
   mutate(label = recode(label, "**PCR**" = "Pf infection"),
