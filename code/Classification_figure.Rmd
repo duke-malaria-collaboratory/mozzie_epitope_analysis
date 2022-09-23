@@ -11,102 +11,10 @@ library(tidyverse)
 library(ggpmisc)
 library(lubridate)
 library(ggalt)
+library(ggpubr)
 
 ```
 
-
-<!-- # Load data -->
-<!-- ```{r} -->
-<!-- all_classified <- readRDS("data/processed/all_infections_classified.RDS") -->
-<!-- cd4_classified <- readRDS("data/processed/cd4_allinfections_classified.RDS") -->
-<!-- ``` -->
-
-
-<!-- # Filter to a few examples -->
-<!-- ```{r} -->
-
-<!-- eg_classified <- all_classified %>% -->
-<!--   filter(unq_memID %in% c("M15_5", "M12_1", "K12_2", "M09_2")) -->
-
-<!-- eg_cd4 <- cd4_classified %>% -->
-<!--   filter(unq_memID %in% c("M15_5", "M12_1", "K12_2", "M09_2")) -->
-
-<!-- ``` -->
-
-
-
-<!-- # Trying with just basic data -->
-<!-- ```{r} -->
-
-<!-- overall_eg <- eg_classified %>% -->
-<!--   arrange(unq_memID, dmy(sample_id_date)) %>% -->
-<!--   filter(StartMiddleEnd %in% c("start", "end", "start+end")) %>% -->
-<!--   mutate(x = ifelse(StartMiddleEnd == "end", lag(sample_id_date,1),  -->
-<!--                     ifelse(StartMiddleEnd == "start+end", sample_id_date, NA)), -->
-<!--          xend = ifelse(StartMiddleEnd %in% c("start+end", "end"), sample_id_date, NA)) %>% -->
-<!--   filter(StartMiddleEnd %in% c("start+end", "end")) %>% -->
-<!--   select(unq_memID, sample_id_date, symptomatic_status, StartMiddleEnd, x, xend) %>% -->
-<!--   mutate(AAs = "A", mem_AA = paste0(unq_memID, "-", AAs), label = "PCR-positive") -->
-
-
-
-<!-- overall_eg %>% ggplot(aes(y = unq_memID))+ -->
-<!--   geom_dumbbell(aes(x = dmy(x), xend = dmy(xend)),size=3, color="#e3e2e1", -->
-<!--                 colour_x = "#e3e2e1") + -->
-<!--   geom_point(aes(x = dmy(xend), color = symptomatic_status), size = 4) + -->
-<!--   scale_color_manual(values = c("#e3e2e1", "darkred"))+ -->
-<!--   theme_minimal() -->
-<!-- ``` -->
-
-<!-- # With epitope types -->
-<!-- ```{r, warning=FALSE, message=FALSE} -->
-<!-- epitope_eg <- eg_cd4 %>% -->
-<!--   arrange(dmy(sample_id_date)) %>% -->
-<!--   select(unq_memID, sample_id_date, AAs, samplenumber, toNext, symptomatic_status) %>% -->
-<!--   group_by(unq_memID, AAs) %>% #use ToNext to define start, start+end, and end -->
-<!--   mutate(StartMiddleEnd = ifelse(is.na(toNext), "start+end", -->
-<!--                                  ifelse(toNext == "uncleared" & samplenumber == min(samplenumber), "start", -->
-<!--                                         ifelse(toNext == "uncleared" & lag(toNext, 1) == "uncleared", "middle", -->
-<!--                                         ifelse(toNext == "uncleared" & as.numeric(lag(toNext,1))> 0, "start", -->
-<!--                                                ifelse(as.numeric(toNext) > 0 & samplenumber == min(samplenumber), "start+end", -->
-<!--                                                       ifelse(as.numeric(toNext) > 0 & lag(toNext,1) != "uncleared", "start+end", -->
-<!--                                                              ifelse(as.numeric(toNext) > 0 & lag(toNext,1) == "uncleared", "end",NA)))))))) %>% -->
-<!--   filter(StartMiddleEnd %in% c("start", "end", "start+end")) %>% -->
-<!--   mutate(x = ifelse(StartMiddleEnd == "end", lag(sample_id_date,1),  -->
-<!--                     ifelse(StartMiddleEnd == "start+end", sample_id_date, NA)), -->
-<!--          xend = ifelse(StartMiddleEnd %in% c("start+end", "end"), sample_id_date, NA)) %>% -->
-<!--   filter(StartMiddleEnd %in% c("start+end", "end")) %>% -->
-<!--   mutate(mem_AA = paste0(unq_memID, "-", AAs)) %>% -->
-<!--   select(unq_memID, sample_id_date, symptomatic_status, StartMiddleEnd, x, xend, AAs, mem_AA) %>% -->
-<!--   mutate(label = AAs) -->
-
-
-<!-- summary_eg <- overall_eg %>% -->
-<!--   rbind(epitope_eg) %>% -->
-<!--   filter(mem_AA %in% c("M15_5-KKTQ", "M15_5-KKTK", "M15_5-KKIQ", "M15_5-A",  -->
-<!-- "M12_1-QKTK", "M12_1-A", "M09_2-QKTQ", "M09_2-QKTK", "M09_2-KKIQ", "M09_2-A", "K12_2-QKTQ", "K12_2-QKKQ", "K12_2-KKIQ", "K12_2-A")) %>% -->
-<!--   arrange(mem_AA)  -->
-
-<!-- summary_eg$label <- factor(summary_eg$label, levels = c("QKTQ", "QKTK", "QKKQ", "KKTQ", "KKTK", "KKIQ", "PCR-positive"), labels = c("Epitope 6", "Epitope 5", "Epitope 4", "Epitope 3", "Epitope 2", "Epitope 1", "PCR-positive")) -->
-
-<!-- summary_eg$unq_memID <- factor(summary_eg$unq_memID, levels = c("K12_2", "M09_2", "M12_1", "M15_5"), labels = c("Person 1", "Person 2", "Person 3", "Person 4")) -->
-
-
-<!-- summary_fig <- summary_eg %>%  -->
-<!--   ggplot(aes(y = label))+ -->
-<!--   geom_dumbbell(aes(x = dmy(x), xend = dmy(xend)),size=2, size_x = 4, color="#87B4C0", -->
-<!--                 colour_x = "#87B4C0") + -->
-<!--   geom_point(aes(x = dmy(xend), color = symptomatic_status), size = 4) + -->
-<!--   scale_color_manual(values = c("#87B4C0", "#CE5B3B"), name = "")+ -->
-<!--   facet_grid(unq_memID~., scales = "free") + -->
-<!--   labs(y = "")+ -->
-<!--   theme_bw() + -->
-<!--   theme(legend.position = "bottom", axis.title.x = element_blank()) -->
-
-
-<!-- summary_fig -->
-
-<!-- ``` -->
 
 # Mock data
 ```{r}
@@ -178,4 +86,130 @@ ggsave(plot = classification_plot, "figures/mock_classification_fig_a.png", widt
 
 ```
 
+
+# Revised
+```{r}
+pcr_df <- mock_eg %>% 
+  mutate(label = recode(label, "**PCR**" = "Pf infection"),
+         person = recode(person, "Person 3" = "Person n")) %>%
+  filter(label == "Pf infection") %>%
+  separate(TTR_summary, into = c("first", "second")) %>%
+  mutate(interval_label = ifelse(first == "Censor", first, ifelse(is.na(TTR), first, second)),
+         interval_x = ifelse(interval_label == "Censor", as.character(mdy(xend)), as.character(mdy(xend) + days(as.numeric(interval_label)/2))), #interval x is for just placing the text where you want it
+         interval_label = ifelse(is.na(TTR), paste0(first, " days"), interval_label),
+         interval_label = ifelse(str_detect(interval_label, "NA"), NA, interval_label),
+         censor_label = ifelse(interval_label == "Censor", "Censor", NA),
+         censor_x = ifelse(interval_label == "Censor", interval_x, NA),
+         bracket_start = ifelse(str_detect(interval_label, "days"), as.character(ymd(interval_x) - days(as.numeric(first)/2)), NA),
+         bracket_end = ifelse(str_detect(interval_label, "days"), as.character(ymd(interval_x) + days(as.numeric(first)/2)), NA),
+         bracket_label = ifelse(str_detect(interval_label, "days"), interval_label, NA)) 
+
+pcr_plot <-  ggplot(pcr_df)+
+  geom_rect(aes(xmin = mdy(x), xmax = mdy(xend), ymin = 0, ymax = 2), fill = "lightgrey")+
+  ggstance::geom_linerangeh(aes(y = 1,
+                                xmin = mdy(x),
+                                xmax = mdy(xend), color = label),
+                            size = 2, alpha = 0.9,
+                            position = ggstance::position_dodgev(height = 0.5)) +
+  geom_point(aes(x = mdy(x), y = 1, color = label), size = 4, alpha = 1) +
+  geom_point(aes(x = mdy(xend), y = 1, color = label), size = 4, alpha = 1)+
+  scale_y_continuous(limits = c(0,2), breaks = c(1), labels = c("Pf infection")) +
+  geom_bracket(data = pcr_df, aes(xmin = ymd(censor_x), xmax = ymd("2018-10-01"), label = censor_label), y.position = 1.4, tip.length = 0.1, label.size = 3) +
+  geom_bracket(data = pcr_df, aes(xmin = ymd(bracket_start), xmax = ymd(bracket_end), label = bracket_label), y.position = 1.4, tip.length = 0.1, label.size = 3) +
+  scale_x_date(limits = c(ymd("2017-04-25"), ymd("2018-11-01")), expand = c(0,0), date_breaks = "100 days", minor_breaks = NULL, date_labels = c("0", "100", "200","300", "400", "500"))+
+  scale_color_manual(values = c("black")) +
+  facet_grid(.~factor(person, levels = c("Person 1",  "Person 2", "Person n"), labels = c("Person 1",  "Person 2", "Person *n*")), scales = "free") +
+  labs(y = "", x = "Time (Days)" , color = "")+
+  theme_bw() +
+  theme(plot.title = element_text(size = 10, hjust = 1), strip.background = element_rect(fill = "white"),  axis.ticks.x = element_blank(),  panel.grid.major.y = element_blank(), panel.grid.minor.y = element_blank(), legend.position = "none", strip.text.x = ggtext::element_markdown(), panel.grid.major.x = element_blank(), strip.background.x = element_rect(color = NA))
+
+#ggsave("figures/mock_classification_overall.png", width = 12, height = 2)
+
+epitope_df <- mock_eg %>% 
+  as_tibble() %>%
+  mutate(person = recode(person, "Person 3" = "Person n"),
+         label = recode(label, "Epitope 5" = "Epitope *m*"),
+         pcr_x = ifelse(label == "**PCR**", x, NA),
+         pcr_xend = ifelse(label == "**PCR**", xend, NA)) %>%
+  fill(pcr_x, pcr_xend, .direction = "downup") %>%
+  filter(label != "**PCR**") %>%
+    group_by(person) %>%
+  complete(label, nesting(pcr_x, pcr_xend)) %>%
+  ungroup() %>%
+  filter(label != "**PCR**") %>%
+  separate(TTR_summary, into = c("first", "second")) %>%
+  mutate(interval_label = ifelse(first == "Censor", first, ifelse(is.na(TTR), first, second)),
+         interval_x = ifelse(interval_label == "Censor", as.character(mdy(xend)), as.character(mdy(xend) + days(as.numeric(interval_label)/2))), #interval x is for just placing the text where you want it
+         interval_label = ifelse(is.na(TTR), paste0(first, " days"), interval_label),
+         interval_label = ifelse(str_detect(interval_label, "NA"), NA, interval_label),
+         censor_label = ifelse(interval_label == "Censor", "Censor", NA),
+         censor_x = ifelse(interval_label == "Censor", interval_x, NA),
+         bracket_start = ifelse(str_detect(interval_label, "days"), as.character(ymd(interval_x) - days(as.numeric(first)/2)), NA),
+         bracket_end = ifelse(str_detect(interval_label, "days"), as.character(ymd(interval_x) + days(as.numeric(first)/2)), NA),
+         bracket_label = ifelse(str_detect(interval_label, "days"), interval_label, NA)) %>%
+  group_by(person) %>%
+  mutate(facet_row = as.numeric(fct_rev(factor(label)))) %>%
+  ungroup()
+
+
+# epitope_plot <-  ggplot(epitope_df)+
+#   geom_rect(aes(xmin = mdy(pcr_x), xmax = mdy(pcr_xend), ymin = 0, ymax = 2), fill = "lightgrey")+
+#   ggstance::geom_linerangeh(aes(y = 1,
+#                                 xmin = mdy(x),
+#                                 xmax = mdy(xend),
+#                                 color = label),
+#                             size = 2, alpha = 0.9) +
+#   geom_point(aes(y = 1, x = mdy(x), color = label), size = 4, alpha = 1) +
+#   geom_point(aes(y = 1, x = mdy(xend), color = label), size = 4, alpha = 1)+
+#   scale_color_manual(values = rev(c("black",'#7fc97f','#beaed4','tan2','gold','#386cb0'))) +
+#   geom_bracket(data = epitope_df, aes(xmin = ymd(censor_x), xmax = ymd("2018-10-01"), label = censor_label), y.position = 1.3, tip.length = 0.1) +
+#   geom_bracket(data = epitope_df, aes(xmin = ymd(bracket_start), xmax = ymd(bracket_end), label = bracket_label), y.position = 1.3, tip.length = 0.1) +
+#   scale_y_continuous(limits = c(0,2)) +
+#   scale_x_date(limits = c(ymd("2017-04-25"), ymd("2018-11-01")), expand = c(0,0), date_breaks = "100 days", minor_breaks = NULL, date_labels = c("0", "100", "200","300", "400", "500"))+
+#   #ggh4x::facet_nested(person + fct_rev(label)~., scales = "free", switch = "y", strip = ggh4x::strip_nested(size = "variable")) +
+#   facet_grid(factor(facet_row)~person, scales = "free")+
+#   labs(y = "", x = "Time (Days)" , color = "")+
+#   guides(color = guide_legend(reverse = TRUE)) +
+#   theme_bw() +
+#   theme(plot.title = element_text(size = 10, hjust = 1), strip.background = element_rect(fill = "white"),  axis.ticks.x = element_blank(), axis.ticks.y = element_blank(), axis.text.y = element_blank(), panel.grid.major.y = element_blank(), panel.grid.minor.y = element_blank(), strip.text.y = element_blank())
+
+epitope_plot <-  ggplot(epitope_df, aes(y = as.numeric(label)))+
+  geom_rect(aes(xmin = mdy(pcr_x), xmax = mdy(pcr_xend)), ymin = min(as.numeric(epitope_df$label)) -1, ymax = max(as.numeric(epitope_df$label)) +1, fill = "lightgrey")+
+  ggstance::geom_linerangeh(aes(xmin = mdy(x),
+                                xmax = mdy(xend),
+                                color = label),
+                            size = 2, alpha = 0.9) +
+  geom_point(aes(x = mdy(x), color = label), size = 4, alpha = 1) +
+  geom_point(aes(x = mdy(xend), color = label), size = 4, alpha = 1)+
+  scale_color_manual(values = rev(c("black",'#7fc97f','#beaed4','tan2','gold','#386cb0'))) +
+  geom_rect(xmin = ymd("2017-04-25"), xmax = ymd("2018-11-01"), ymin = 1.3, ymax = 1.7, fill = "white") +
+  geom_bracket(data = epitope_df, aes(xmin = ymd(censor_x), xmax = ymd("2018-10-01"), label = censor_label, y.position = as.numeric(epitope_df$label) + 0.3), tip.length = 0.03, inherit.aes = FALSE, label.size = 3) +
+  geom_bracket(data = epitope_df, aes(xmin = ymd(bracket_start), xmax = ymd(bracket_end), label = bracket_label, y.position = as.numeric(epitope_df$label) + 0.3), tip.length = 0.03, inherit.aes = FALSE, label.size = 3) +
+  scale_x_date(limits = c(ymd("2017-04-25"), ymd("2018-11-01")), expand = c(0,0), date_breaks = "100 days", minor_breaks = NULL, date_labels = c("0", "100", "200","300", "400", "500"))+
+  #ggh4x::facet_nested(person + fct_rev(label)~., scales = "free", switch = "y", strip = ggh4x::strip_nested(size = "variable")) +
+  scale_y_continuous(limits = c(0.5,5.5), breaks = c(1,2,3,4,5),labels = rev(c("Epitope 1", "Epitope 2", "Epitope 3", "Epitope 4", "Epitope *m*"))) +
+  labs(y = "", x = "Time (Days)" , color = "")+
+  guides(color = guide_legend(reverse = TRUE)) +
+  facet_grid(.~person, scales = "free") +
+  theme_bw() +
+  theme(axis.text.y = ggtext::element_markdown(), plot.title = element_text(size = 10, hjust = 1), strip.background = element_rect(fill = "white"), panel.grid.major.x = element_blank(), panel.grid.major.y = element_blank(), panel.grid.minor.y = element_blank(), strip.text.x = element_blank(), legend.position = "none")
+
+
+#ggsave("figures/mock_classification_homologous.png", width = 12, height = 4)
+
+#combining panels
+
+combined <- egg::ggarrange(pcr_plot+
+            labs(x = "")+
+            theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()),
+          epitope_plot +
+            theme(strip.text.x = element_blank()),
+          ncol = 1,
+          heights = c(0.3,1),
+          labels = c("A", "B"),
+          label.args = list(gp = grid::gpar(fontface = "bold")))
+
+
+ggsave(plot = combined, file = "figures/classification_fig.png", height = 4, width = 12)
+```
 
