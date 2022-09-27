@@ -43,10 +43,10 @@ library(ggpubr)
 Define current epitope CSP/AMA and AA positions of interest (as determined from the RF models). Need to to this before knitting!
 ```{r,echo=T}
 #CSP CD4 T-cell (Th2R)
-# CurrentEpitopeName<-("CD4")
-# EpitopeCurrent<-c("x25","x28","x29","x31")
-# AMA <- FALSE
-# prev <- TRUE
+CurrentEpitopeName<-("CD4")
+EpitopeCurrent<-c("x25","x28","x29","x31")
+AMA <- FALSE
+prev <- TRUE
 
 
 #CSP CD8 T-cell (Th3R)
@@ -68,10 +68,10 @@ Define current epitope CSP/AMA and AA positions of interest (as determined from 
 # prev <- TRUE
 
 # #AMA
-CurrentEpitopeName<-("AMA")
-EpitopeCurrent<-c("x36","x44","x77","x90")
-AMA <- TRUE
-prev <- TRUE
+# CurrentEpitopeName<-("AMA")
+# EpitopeCurrent<-c("x36","x44","x77","x90")
+# AMA <- TRUE
+# prev <- TRUE
 
 # #AMA c1L
 # CurrentEpitopeName<-("c1L")
@@ -96,12 +96,12 @@ HumanData<-read.csv("data/original/spat21_human_final_censored_data_for_disserta
 
 season <- readRDS("data/original/spat21_mosquito_anopheles_merged_data_18JAN2019.RDS") %>%
   mutate(collection_year = year(collection_date)) %>%
-  arrange(collection_date) %>%
+  arrange(ymd(collection_date)) %>%
   group_by(collection_year, collection_week) %>%
   mutate(n_week = n()) %>%
   mutate(week_year = paste0(collection_week,"_", collection_year)) %>%
   ungroup() %>%
-  arrange(collection_date) %>%
+  arrange(ymd(collection_date)) %>%
   select(week_year, n_week) %>%
   unique() %>%
   mutate(mosquito_prev_2weeks = lag(n_week,2) + lag(n_week,1)) %>%
@@ -356,7 +356,7 @@ Time to, starting from any epitope in a sample that is not followed by a sample 
 ```{r,fig.width=2.5,fig.height=5}
 TimeToDataAdvEpitope =HumanData%>%
   mutate(symptomatic_status = ifelse(is.na(main_exposure_primary_case_def), as.character(main_outcome_primary_case_def),as.character(main_exposure_primary_case_def))) %>%
-  arrange(unq_memID, sample_id_date) %>% 
+  arrange(unq_memID, ymd(sample_id_date)) %>% 
   group_by(unq_memID) %>%
   #add columns for previous symptomatic status so that we can filter out infections within 14 days of a symptomatic infection
   mutate(Sx_prev = lag(symptomatic_status,1),
@@ -364,7 +364,7 @@ TimeToDataAdvEpitope =HumanData%>%
   #remove positive samples within 14 days of a symptomatic infection 
   filter(Sx_prev != "symptomatic infection"| is.na(Sx_prev) | days_since_prev > days(14) | pf_pcr_infection_status != "positive") %>%
   ungroup() %>%
-  arrange(unq_memID, sample_id_date) %>% 
+  arrange(unq_memID, ymd(sample_id_date)) %>% 
   group_by(unq_memID) %>%
 #Add a number to each sample
   mutate(number=1)%>%
@@ -540,6 +540,38 @@ coxplot1
 saveRDS(coxplot1, paste0("figures/robj/", CurrentEpitopeName,"_coxme_fig.RDS"))
 
 ```
+
+## Should MOI be included in the models?
+```{r}
+
+model_moicont <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + ageCat + freq+mosquito_prev_2weeks_cat+epitopecount+(1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron")
+
+model_moicont
+exp(confint(model_moicont))
+
+model_moicat <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + ageCat + freq+mosquito_prev_2weeks_cat+epitopeCat+(1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron")
+
+model_moicat
+exp(confint(model_moicat))
+
+
+extractAIC.coxme <- function(x){
+  loglik <- x$loglik + c(0, 0, x$penalty)
+  chi1 <- 2*diff(loglik[1:2]) 
+  chi2 <- 2*diff(loglik[c(1,3)])
+  c(chi1 - 2*x$df[1], chi2 - 2*x$df[2])
+}
+
+extractAIC(model) #model without moi
+extractAIC(model_moicont) #model with continuous moi
+extractAIC(model_moicat) #model with categorical moi
+
+
+
+
+```
+
+
 
 ## Comparing epitope frequncies in infections removed from the dataset and those maintained
 ```{r}

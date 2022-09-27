@@ -46,7 +46,7 @@ season <- readRDS("data/original/spat21_mosquito_anopheles_merged_data_18JAN2019
   mutate(n_week = n()) %>%
   mutate(week_year = paste0(collection_week,"_", collection_year)) %>%
   ungroup() %>%
-  arrange(collection_date) %>%
+  arrange(ymd(collection_date)) %>%
   select(week_year, n_week) %>%
   unique() %>%
   mutate(mosquito_prev2weeks = lag(n_week,2) + lag(n_week,1)) %>%
@@ -89,7 +89,7 @@ head(HDS)
 classified_infections <- HumanData %>%
   select(unq_memID,pf_pcr_infection_status,sample_id_date,sample_name_dbs,age_y_baseline,gender,pfr364Q_std_combined, main_exposure_primary_case_def, main_outcome_primary_case_def)%>%
   mutate(symptomatic_status = ifelse(is.na(main_exposure_primary_case_def), as.character(main_outcome_primary_case_def),as.character(main_exposure_primary_case_def))) %>%
-  arrange(unq_memID, sample_id_date) %>% 
+  arrange(unq_memID, ymd(sample_id_date)) %>% 
   group_by(unq_memID) %>% 
   #add columns for previous and next infections so that we can filter out anything within 14 days of a symptomatic infection
   mutate(pcr_next = lead(pf_pcr_infection_status,1),
@@ -119,7 +119,7 @@ classified_infections <- HumanData %>%
                                   (symptomatic_status == "asymptomatic infection" | is.na(symptomatic_status)) & pcr_prev == "positive" & (Sx_prev == "asymptomatic infection" | is.na(Sx_prev)) & pcr_next == "positive" ~ "middle"))%>%
   #remove pf negative samples
   filter(pf_pcr_infection_status=="positive")%>%
-  #Remove middle samles
+  #Remove middle samples
   filter(StartMiddleEnd!="middle")%>%
   #Make a start and end date variable
   mutate(StartDate=case_when(StartMiddleEnd=="start"~paste(sample_id_date),
@@ -954,6 +954,80 @@ symp_table <- xtabs(~symptomatic_status+cutoff_60, data=popcheck_overall_moi)
 ftable(symp_table)
 summary(symp_table)
 
+```
+
+## playing around
+```{r}
+# symp <- classified_inf_60_moi %>%
+#   filter(symptomatic_status == "symptomatic infection")
+# 
+# df <- tibble()
+# conf <- tibble()
+# 
+# for(i in 1:1000) {
+#   asymp <- classified_inf_60_moi %>%
+#   filter(symptomatic_status == "asymptomatic infection") %>%
+#     slice_sample(n = 64)
+#   
+#   
+#   simulate <- symp %>%
+#     bind_rows(asymp)
+#   
+#   cox_simulate <- coxme(Surv(Days,EventCensored)~ageCat+gender+symptomatic_status+mosquito_prev_2weeks_cat+moi_cat+(1|unq_memID),data=simulate)
+#   
+#     df <- df %>%
+#     bind_rows(cox_simulate$coefficients)
+#     
+#     conf <- conf %>%
+#       bind_rows(data.frame(exp(confint(cox_simulate))))
+# }
+# 
+# conf_int <- conf %>%
+#   rownames_to_column(var = "covariate") %>%
+#   rownames_to_column(var = "index") %>%
+#   mutate(i = ceiling(as.numeric(index)/7)) %>%
+#   mutate(covariate = gsub("\\....*","",covariate))
+
+
+
+
+
+# df %>%
+#   ggplot() +
+#   aes(x = exp(`mosquito_prev_2weeks_cat> 50 mosquitoes`)) +
+#   geom_histogram()
+# 
+# df %>%
+#   ggplot() +
+#   aes(x = `ageCat5-15`) +
+#   geom_histogram()
+
+
+
+ggplot(classified_inf_60_moi) +
+  aes(x = mosquito_prev_2weeks_cat, y = Days) +
+  geom_boxplot()
+
+ggplot(classified_inf_60_moi) +
+  aes(x = mosquito_prev_2weeks_cat, y = Days) +
+  geom_boxplot() +
+  facet_wrap(~EventCensored)
+
+classified_inf_60_moi %>%
+  ggplot() +
+  aes(x = sample_id_date, y = mosquito_prev_2weeks_cat) +
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90))
+
+classified_inf_60_moi %>%
+  ggplot() +
+  aes(x = ymd(sample_id_date), y = Days, color = mosquito_prev_2weeks_cat) +
+  geom_point()
+
+
+
+coxme(Surv(Days,EventCensored)~ageCat+gender+symptomatic_status+mosquito_prev_2weeks_cat+moi_cat+(1|unq_memID),data=classified_inf_60_moi %>% filter(ymd(sample_id_date) < ymd("2018-01-01"), Days < 200))
+      
 ```
 
 
