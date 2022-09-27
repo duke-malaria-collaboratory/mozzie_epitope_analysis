@@ -1138,11 +1138,17 @@ for_perm <- HumanData%>%
                               age_y_baseline >= 15 ~ ">15"))%>%
     mutate(ageCat=factor(ageCat,levels=c("<5","5-15",">15"))) 
 
+epitope_frequencies <- for_perm %>%
+  separate_rows(AAs) %>%
+  group_by(AAs) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n/sum(n))
+
 #define function for permutation
 perm <- function(data = for_perm) {
   perm_data <- for_perm %>%
-    group_by(is.na(AAs)) %>%
-    mutate(AAsrandom = sample(AAs)) %>%
+    rowwise() %>%
+    mutate(AAsrandom = str_c(sample(epitope_frequencies$AAs, size = epitopecount, replace = FALSE, prob = epitope_frequencies$freq), collapse = ",")) %>%
     ungroup() %>%
     separate_rows(AAsrandom)%>%
     group_by(unq_memID, AAsrandom)%>% 
@@ -1166,6 +1172,39 @@ perm <- function(data = for_perm) {
   return(perm_data)
 
 }
+
+
+
+
+
+
+# perm <- function(data = for_perm) {
+#   perm_data <- for_perm %>%
+#     group_by(is.na(AAs)) %>%
+#     mutate(AAsrandom = sample(AAs)) %>%
+#     ungroup() %>%
+#     separate_rows(AAsrandom)%>%
+#     group_by(unq_memID, AAsrandom)%>% 
+#   #Uncleared haplotypes are defined as haplotypes that occur in two subsequent samples - note this where one should check if the dates are handled correctly ie. counted from end to start of each haplotype
+#     mutate(toNext=case_when(samplenumber==lead(samplenumber,1)-1 & symptomatic_status == "asymptomatic infection" ~ "uncleared",
+#                           samplenumber==lead(samplenumber,1)-1 & symptomatic_status == "symptomatic infection" ~ paste0(as.Date(lead(sample_id_date,1)) - as.Date(sample_id_date)),
+#                           samplenumber != lead(samplenumber,1)-1 ~ paste0(as.Date(lead(sample_id_date,1)) - as.Date(sample_id_date))))%>%
+#   #Remove samples without AAs and uncleared AAs
+#     ungroup()%>%
+#     filter(!is.na(AAsrandom))%>%
+#     filter(is.na(toNext)|toNext!="uncleared")%>%
+#    # filter(!toNext=="uncleared"&!toNext=="same")%>%
+#   #Add censoring criteria ie if there is no next sample, time to end of study is calculated and EventCensored=0 indicate that
+#     mutate(EventCensored = if_else(toNext!="NA","1","NA","0"))%>%
+#     mutate(Days = if_else(EventCensored=="1",paste0(toNext),paste0(as.Date("20180731","%Y%m%d") - as.Date(sample_id_date))))%>%
+#     #remove final positive samples as they are uncleared
+#     filter(samplenumber!=samplemax)%>%
+#     mutate(Days=as.numeric(Days), cutoff_60=ifelse(Days>60,1,0))%>%
+#     mutate(EventCensored=as.numeric(EventCensored))
+# 
+#   return(perm_data)
+# 
+# }
 
 
 #perform permutations 1000x
