@@ -62,10 +62,10 @@ Define current epitope CSP/AMA and AA positions of interest (as determined from 
 # prev <- FALSE
 
 # #CSP Combined T-cell
-# CurrentEpitopeName<-("Combined")
-# EpitopeCurrent<-c("x25","x28","x29","x31","x59","x64","x66","x68")
-# AMA <- FALSE
-# prev <- TRUE
+CurrentEpitopeName<-("Combined")
+EpitopeCurrent<-c("x25","x28","x29","x31","x59","x64","x66","x68")
+AMA <- FALSE
+prev <- TRUE
 
 # #AMA
 # CurrentEpitopeName<-("AMA")
@@ -74,10 +74,10 @@ Define current epitope CSP/AMA and AA positions of interest (as determined from 
 # prev <- TRUE
 
 # #AMA c1L
-CurrentEpitopeName<-("c1L")
-EpitopeCurrent<-c("x44","x47","x48","x53")
-AMA <- TRUE
-prev <- TRUE
+# CurrentEpitopeName<-("c1L")
+# EpitopeCurrent<-c("x44","x47","x48","x53")
+# AMA <- TRUE
+# prev <- TRUE
 
 
 ```
@@ -567,6 +567,13 @@ extractAIC(model_moicont) #model with continuous moi
 extractAIC(model_moicat) #model with categorical moi
 
 
+#likelihood ratio tests
+
+# no moi vs continuous moi
+anova(model_moicont, model)
+
+# no moi vs categorical moi
+anova(model_moicat, model)
 
 
 ```

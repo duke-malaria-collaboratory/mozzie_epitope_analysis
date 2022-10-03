@@ -645,9 +645,11 @@ classified_inf_60_moi <- classified_infections_60 %>%
                           ifelse(moi > 1 & moi < 6, "2-5",
                                  ifelse(moi > 5, "> 5", NA))),
          mosquito_prev_2weeks_cat = factor(mosquito_prev_2weeks_cat, levels = c("0 - 50 mosquitoes", "> 50 mosquitoes"))) %>%
-  filter(!is.na(moi_cat))
+  filter(!is.na(moi), !is.na(ageCat), !is.na(gender), !is.na(symptomatic_status), !is.na(mosquito_prev_2weeks_cat))
 
+cox_60_restrict <- coxme(Surv(Days,EventCensored)~ageCat+gender+symptomatic_status+mosquito_prev_2weeks_cat+(1|unq_memID),data=classified_inf_60_moi)
 
+cox_60_restrict
 
 cox_60_moicont <-coxme(Surv(Days,EventCensored)~ageCat+gender+symptomatic_status+mosquito_prev_2weeks_cat+moi+(1|unq_memID),data=classified_inf_60_moi)
 
@@ -660,6 +662,8 @@ cox_60_moicat <-coxme(Surv(Days,EventCensored)~ageCat+gender+symptomatic_status+
 
 cox_60_moicat
 
+anova(cox_60_moicont, cox_60_restrict)
+anova(cox_60_moicat, cox_60_restrict)
 
 extractAIC.coxme <- function(x){
   loglik <- x$loglik + c(0, 0, x$penalty)
@@ -668,7 +672,7 @@ extractAIC.coxme <- function(x){
   c(chi1 - 2*x$df[1], chi2 - 2*x$df[2])
 }
 
-extractAIC(cox_fig_60) #model without moi
+extractAIC(cox_60_restrict) #model without moi
 extractAIC(cox_60_moicont) #model with continuous moi
 extractAIC(cox_60_moicat) #model with categorical moi
 
@@ -681,354 +685,354 @@ classified_inf_60_moi %>%
 summary(classified_inf_60_moi$moi_cat)
 
 ```
-# Fig 2
-
-```{r}
-fit_surv60_moi <- survfit(Surv(Days,EventCensored)~1,data=classified_inf_60_moi)
-
-fit_surv60_moi
-
-summary(fit_surv60_moi, times = 365.25)
-
-fit_surv_strat60_moi <-survfit(Surv(Days,EventCensored)~symptomatic_status,data=classified_inf_60_moi)
-
-fit_surv_strat60_moi
-
-#need to fix
-summary(fit_surv_strat60_moi, times = 365.25, extend = TRUE)
-
-
-figFA_60_moi <- ggsurvplot_combine(list(fit_surv_strat60_moi, fit_surv60_moi),
-                data = classified_infections,
-                risk.table = TRUE,
-                xlab=("Time in days"),
-                ylab=("Probability of survival without reinfection"),
-                font.main = c(12),
-                font.x = c(10),
-                font.y = c(10),
-                font.tickslab = c(8),
-                fontsize = 4,
-                risk.table.fontsize = 4,
-                palette = c(strat_colors, "black"),
-                tables.theme = theme_cleantable(),
-                tables.height = 0.25,
-                tables.col = "strata",
-                legend = "none",
-                legend.title = "Index infection",
-                legend.labs = c("Asx", "Sx", "All"),
-                conf.int = TRUE,title="Time to reinfection",xlim=c(-10,400))
-figFA_60_moi
-
-#cox model and plot of HRs
-cox_fig_60_moi<-coxme(Surv(Days,EventCensored)~ageCat+gender+symptomatic_status+mosquito_prev_2weeks_cat+moi_cat+(1|unq_memID),data=classified_inf_60_moi)
-
-cox_fig_60_moi
-
-coeff1_60_moi<-fixef(cox_fig_60_moi)
-
-coxmetable_fig_60_moi<-as.data.frame(exp(confint(cox_fig_60_moi)))
-
-coxmetable_fig_60_moi<-cbind(coxmetable_fig_60_moi,exp(coeff1_60_moi))
-#Change labels for plot
-coxmetable_fig_60_moi$label<-row.names(coxmetable_fig_60_moi)
-coxmetable_fig_60_moi$label[1]="Age 5-15"
-coxmetable_fig_60_moi$label[2]="Age >15"
-coxmetable_fig_60_moi$label[3]="Male"
-coxmetable_fig_60_moi$label[4]="Symptomatic"
-coxmetable_fig_60_moi$label[5]="> 50 mosquitoes"
-coxmetable_fig_60_moi$label[6]="MOI 2-5"
-coxmetable_fig_60_moi$label[7]="MOI > 5"
-#Table
-coxmetable_fig_60_moi <- coxmetable_fig_60_moi %>%
-  rename("aHR" = "exp(coeff1_60_moi)")
-
-coxmetable_fig_60_moi$label <- factor(coxmetable_fig_60_moi$label, levels = c("MOI > 5","MOI 2-5","Age >15", "Age 5-15", "Male", "> 50 mosquitoes", "Symptomatic"))
-#Plot
-figFB_60_moi <- ggplot(coxmetable_fig_60_moi,aes(y=label,x=aHR,xmin=`2.5 %`, xmax=`97.5 %`))+
-  geom_pointrange(size=1,shape=18)+
-  scale_x_continuous(trans = "log") +
-  geom_vline(xintercept=1, lty=2)+
-  theme_bw()+
-  ylab("")+
-  xlab("Adj. HR (95%)")
-figFB_60_moi
-
-
-coxmetable_fig_60_moi
-
-#combine 
-figF_60_moi <- ggarrange(
-  ggarrange(figFA_60_moi$plot +
-              geom_vline(xintercept = 60, linetype = "dotted") +
-            scale_x_continuous(breaks = c(0,60,100,200,300,400)) +
-            theme_bw() +
-              theme(legend.position = "none", plot.title = element_blank()),
-            figFA_60_moi$table +
-              theme(
-                plot.title = element_text(size = 12)),
-            heights = c(1,0.3),
-            ncol = 1,
-            align = "v"),
-  figFB_60_moi,
-  nrow = 1,
-  labels = c("A", "B"),
-  hjust = 0,
-  vjust = 1,
-  widths = c(1.5,1))
-
-figF_60_moi
-
-ggsave(plot = figF_60_moi, "figures/overall_reinfection_moi.png", width = 8, height = 5)
-
-
-
-```
-
-
-# Revised Table 1
-Age, sex, transmission season, parasite density
-```{r}
-library(gtsummary)
-
-classified_inf_60_moi %>%
-  select(ageCat, gender, mosquito_prev_2weeks_cat, pfr364Q_std_combined, symptomatic_status, moi, moi_cat, csp_reads, ama_reads) %>%
-  tbl_summary(by = symptomatic_status, digits = all_continuous() ~ 2) %>%
-  add_p() %>%
-  add_overall()
-```
-
-**No of subsequent episodes**
-```{r}
-classified_inf_60_moi %>%
-  group_by(unq_memID) %>%
-  mutate(total_episodes = n()) %>%
-  arrange(ymd(sample_id_date)) %>%
-  mutate(episode_no = row_number(unq_memID), subsequent_episodes = total_episodes - episode_no) %>%
-  ungroup() %>%
-  select(symptomatic_status, subsequent_episodes) %>%
-  tbl_summary(by = symptomatic_status, 
-              digits = all_continuous() ~ 2, 
-              type = everything() ~ "continuous") %>%
-  add_p() %>%
-  add_overall()
-  
-
-classified_inf_60_moi %>%
-  group_by(unq_memID) %>%
-  mutate(total_episodes = n()) %>%
-  arrange(ymd(sample_id_date)) %>%
-  mutate(episode_no = row_number(unq_memID), subsequent_episodes = total_episodes - episode_no) %>%
-  ungroup() %>%
-  select(symptomatic_status, subsequent_episodes) %>%
-  tbl_summary(by = symptomatic_status) %>%
-  add_p() #%>%
-  #add_overall()
-  
-```
-
-
-**subsequent infections/month**
-```{r}
-classified_inf_60_moi %>%
-  group_by(unq_memID) %>%
-  mutate(total_episodes = n()) %>%
-  arrange(ymd(sample_id_date)) %>%
-  mutate(episode_no = row_number(unq_memID), subsequent_episodes = total_episodes - episode_no) %>%
-  ungroup() %>%
-  mutate(months_to_end = as.period(max(ymd(sample_id_date))-ymd(sample_id_date)) %/% months(1), subsequent_permonth =  ifelse(subsequent_episodes == 0,0, subsequent_episodes/as.numeric(months_to_end))) %>%
-  select(symptomatic_status, subsequent_permonth) %>%
-  tbl_summary(by = symptomatic_status) %>%
-  add_p() %>%
-  add_overall()
-
-
-
-```
-
-
-
-**MOI of subsequent infection**
-```{r}
-classified_inf_60_moi %>%
-  group_by(unq_memID) %>%
-  arrange(ymd(sample_id_date)) %>%
-  mutate(total_episodes = n(), episode_no = row_number(unq_memID), subsequent_episodes = total_episodes - episode_no) %>%
-  mutate(moi_next = lead(moi),
-         moi_cat_next = lead(moi_cat)) %>%
-  ungroup() %>%
-  select(symptomatic_status, moi_next, moi_cat_next) %>%
-  tbl_summary(by = symptomatic_status) %>%
-  add_p() %>%
-  add_overall()
-```
-
-# Revised Table S1
-```{r}
-popcheck_overall_moi<-classified_infections %>%
-  left_join(csp, by = "sample_name_dbs") %>%
-  rename(csp_moi = haplotype_number,
-         csp_reads = haplotype_reads,
-         csp_haps = haplotype_list) %>%
-  left_join(ama, by = "sample_name_dbs") %>%
-  rename(ama_moi = haplotype_number,
-         ama_reads = haplotype_reads,
-         ama_haps = haplotype_list) %>%
-  mutate(moi = pmax(csp_moi, ama_moi, na.rm = TRUE),
-         moi_cat = ifelse(moi < 2, "1",
-                          ifelse(moi > 1 & moi < 6, "2-5",
-                                 ifelse(moi > 5, "> 5", NA)))) %>%
-  filter(!is.na(moi_cat))
-
-#cutoff_60 is variable before and after? greater than 60 vs less than or equal to 60
-
-#time to censoring, mean, days
-popcheck_overall_moi %>% 
-  group_by(cutoff_60) %>% 
-  summarize_at(vars(Days), list(name = mean))
-  
-mean(popcheck_overall_moi$Days)
-
-t.test(popcheck_overall_moi$Days, popcheck_overall_moi$cutoff_60)
-
-
-#symptomatic status
-table(popcheck_overall_moi$symptomatic_status,useNA = "always")
-popcheck_overall_moi %>%
-  group_by(symptomatic_status) %>%
-  summarise(n=(n()))
-popcheck_overall_moi %>%
-  group_by(symptomatic_status,cutoff_60) %>%
-  summarise(n=n())
-
-CrossTable(popcheck_overall_moi$symptomatic_status, popcheck_overall_moi$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS"))
-
-
-#Age
-table(popcheck_overall_moi$ageCat,useNA = "always")
-popcheck_overall_moi %>%
-  group_by(ageCat) %>%
-  summarise(n=(n()))
-popcheck_overall_moi %>%
-  group_by(ageCat,cutoff_60) %>%
-  summarise(n=n())
-
-
-CrossTable(popcheck_overall_moi$ageCat, popcheck_overall_moi$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS"))
-
-
-#Sex
-table(popcheck_overall_moi$gender,useNA = "always")
-popcheck_overall_moi %>%
-  group_by(gender) %>%
-  summarise(n=(n()))
-popcheck_overall_moi %>%
-  group_by(gender,cutoff_60) %>%
-  summarise(n=n())
-
-
-CrossTable(popcheck_overall_moi$gender, popcheck_overall_moi$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS"))
-
-#Transmission Season
-table(popcheck_overall_moi$mosquito_prev_2weeks_cat,useNA = "always")
-popcheck_overall_moi %>%
-  group_by(mosquito_prev_2weeks_cat) %>%
-  summarise(n=(n()))
-popcheck_overall_moi %>%
-  group_by(mosquito_prev_2weeks_cat, cutoff_60) %>%
-  summarise(n=(n()))
-
-
-CrossTable(popcheck_overall_moi$mosquito_prev_2weeks_cat, popcheck_overall_moi$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS"))
-
-
-CrossTable(popcheck_overall_moi$symptomatic_status, popcheck_overall_moi$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS"))
-
-CrossTable(popcheck_overall_moi$ageCat, popcheck_overall_moi$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS"))
-
-CrossTable(popcheck_overall_moi$gender, popcheck_overall_moi$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS"))
-
-CrossTable(popcheck_overall_moi$mosquito_prev_2weeks_cat, popcheck_overall_moi$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS"))
-
-#one way to get frequencies and do tests of independence
-symp_table <- xtabs(~symptomatic_status+cutoff_60, data=popcheck_overall_moi)
-ftable(symp_table)
-summary(symp_table)
-
-```
-
-## playing around
-```{r}
-# symp <- classified_inf_60_moi %>%
-#   filter(symptomatic_status == "symptomatic infection")
-# 
-# df <- tibble()
-# conf <- tibble()
-# 
-# for(i in 1:1000) {
-#   asymp <- classified_inf_60_moi %>%
-#   filter(symptomatic_status == "asymptomatic infection") %>%
-#     slice_sample(n = 64)
-#   
-#   
-#   simulate <- symp %>%
-#     bind_rows(asymp)
-#   
-#   cox_simulate <- coxme(Surv(Days,EventCensored)~ageCat+gender+symptomatic_status+mosquito_prev_2weeks_cat+moi_cat+(1|unq_memID),data=simulate)
-#   
-#     df <- df %>%
-#     bind_rows(cox_simulate$coefficients)
-#     
-#     conf <- conf %>%
-#       bind_rows(data.frame(exp(confint(cox_simulate))))
-# }
-# 
-# conf_int <- conf %>%
-#   rownames_to_column(var = "covariate") %>%
-#   rownames_to_column(var = "index") %>%
-#   mutate(i = ceiling(as.numeric(index)/7)) %>%
-#   mutate(covariate = gsub("\\....*","",covariate))
-
-
-
-
-
-# df %>%
-#   ggplot() +
-#   aes(x = exp(`mosquito_prev_2weeks_cat> 50 mosquitoes`)) +
-#   geom_histogram()
-# 
-# df %>%
-#   ggplot() +
-#   aes(x = `ageCat5-15`) +
-#   geom_histogram()
-
-
-
-ggplot(classified_inf_60_moi) +
-  aes(x = mosquito_prev_2weeks_cat, y = Days) +
-  geom_boxplot()
-
-ggplot(classified_inf_60_moi) +
-  aes(x = mosquito_prev_2weeks_cat, y = Days) +
-  geom_boxplot() +
-  facet_wrap(~EventCensored)
-
-classified_inf_60_moi %>%
-  ggplot() +
-  aes(x = sample_id_date, y = mosquito_prev_2weeks_cat) +
-  geom_point() +
-  theme(axis.text.x = element_text(angle = 90))
-
-classified_inf_60_moi %>%
-  ggplot() +
-  aes(x = ymd(sample_id_date), y = Days, color = mosquito_prev_2weeks_cat) +
-  geom_point()
-
-
-
-coxme(Surv(Days,EventCensored)~ageCat+gender+symptomatic_status+mosquito_prev_2weeks_cat+moi_cat+(1|unq_memID),data=classified_inf_60_moi %>% filter(ymd(sample_id_date) < ymd("2018-01-01"), Days < 200))
-      
-```
+<!-- # Fig 2 -->
+
+<!-- ```{r} -->
+<!-- fit_surv60_moi <- survfit(Surv(Days,EventCensored)~1,data=classified_inf_60_moi) -->
+
+<!-- fit_surv60_moi -->
+
+<!-- summary(fit_surv60_moi, times = 365.25) -->
+
+<!-- fit_surv_strat60_moi <-survfit(Surv(Days,EventCensored)~symptomatic_status,data=classified_inf_60_moi) -->
+
+<!-- fit_surv_strat60_moi -->
+
+<!-- #need to fix -->
+<!-- summary(fit_surv_strat60_moi, times = 365.25, extend = TRUE) -->
+
+
+<!-- figFA_60_moi <- ggsurvplot_combine(list(fit_surv_strat60_moi, fit_surv60_moi), -->
+<!--                 data = classified_infections, -->
+<!--                 risk.table = TRUE, -->
+<!--                 xlab=("Time in days"), -->
+<!--                 ylab=("Probability of survival without reinfection"), -->
+<!--                 font.main = c(12), -->
+<!--                 font.x = c(10), -->
+<!--                 font.y = c(10), -->
+<!--                 font.tickslab = c(8), -->
+<!--                 fontsize = 4, -->
+<!--                 risk.table.fontsize = 4, -->
+<!--                 palette = c(strat_colors, "black"), -->
+<!--                 tables.theme = theme_cleantable(), -->
+<!--                 tables.height = 0.25, -->
+<!--                 tables.col = "strata", -->
+<!--                 legend = "none", -->
+<!--                 legend.title = "Index infection", -->
+<!--                 legend.labs = c("Asx", "Sx", "All"), -->
+<!--                 conf.int = TRUE,title="Time to reinfection",xlim=c(-10,400)) -->
+<!-- figFA_60_moi -->
+
+<!-- #cox model and plot of HRs -->
+<!-- cox_fig_60_moi<-coxme(Surv(Days,EventCensored)~ageCat+gender+symptomatic_status+mosquito_prev_2weeks_cat+moi_cat+(1|unq_memID),data=classified_inf_60_moi) -->
+
+<!-- cox_fig_60_moi -->
+
+<!-- coeff1_60_moi<-fixef(cox_fig_60_moi) -->
+
+<!-- coxmetable_fig_60_moi<-as.data.frame(exp(confint(cox_fig_60_moi))) -->
+
+<!-- coxmetable_fig_60_moi<-cbind(coxmetable_fig_60_moi,exp(coeff1_60_moi)) -->
+<!-- #Change labels for plot -->
+<!-- coxmetable_fig_60_moi$label<-row.names(coxmetable_fig_60_moi) -->
+<!-- coxmetable_fig_60_moi$label[1]="Age 5-15" -->
+<!-- coxmetable_fig_60_moi$label[2]="Age >15" -->
+<!-- coxmetable_fig_60_moi$label[3]="Male" -->
+<!-- coxmetable_fig_60_moi$label[4]="Symptomatic" -->
+<!-- coxmetable_fig_60_moi$label[5]="> 50 mosquitoes" -->
+<!-- coxmetable_fig_60_moi$label[6]="MOI 2-5" -->
+<!-- coxmetable_fig_60_moi$label[7]="MOI > 5" -->
+<!-- #Table -->
+<!-- coxmetable_fig_60_moi <- coxmetable_fig_60_moi %>% -->
+<!--   rename("aHR" = "exp(coeff1_60_moi)") -->
+
+<!-- coxmetable_fig_60_moi$label <- factor(coxmetable_fig_60_moi$label, levels = c("MOI > 5","MOI 2-5","Age >15", "Age 5-15", "Male", "> 50 mosquitoes", "Symptomatic")) -->
+<!-- #Plot -->
+<!-- figFB_60_moi <- ggplot(coxmetable_fig_60_moi,aes(y=label,x=aHR,xmin=`2.5 %`, xmax=`97.5 %`))+ -->
+<!--   geom_pointrange(size=1,shape=18)+ -->
+<!--   scale_x_continuous(trans = "log") + -->
+<!--   geom_vline(xintercept=1, lty=2)+ -->
+<!--   theme_bw()+ -->
+<!--   ylab("")+ -->
+<!--   xlab("Adj. HR (95%)") -->
+<!-- figFB_60_moi -->
+
+
+<!-- coxmetable_fig_60_moi -->
+
+<!-- #combine  -->
+<!-- figF_60_moi <- ggarrange( -->
+<!--   ggarrange(figFA_60_moi$plot + -->
+<!--               geom_vline(xintercept = 60, linetype = "dotted") + -->
+<!--             scale_x_continuous(breaks = c(0,60,100,200,300,400)) + -->
+<!--             theme_bw() + -->
+<!--               theme(legend.position = "none", plot.title = element_blank()), -->
+<!--             figFA_60_moi$table + -->
+<!--               theme( -->
+<!--                 plot.title = element_text(size = 12)), -->
+<!--             heights = c(1,0.3), -->
+<!--             ncol = 1, -->
+<!--             align = "v"), -->
+<!--   figFB_60_moi, -->
+<!--   nrow = 1, -->
+<!--   labels = c("A", "B"), -->
+<!--   hjust = 0, -->
+<!--   vjust = 1, -->
+<!--   widths = c(1.5,1)) -->
+
+<!-- figF_60_moi -->
+
+<!-- ggsave(plot = figF_60_moi, "figures/overall_reinfection_moi.png", width = 8, height = 5) -->
+
+
+
+<!-- ``` -->
+
+
+<!-- # Revised Table 1 -->
+<!-- Age, sex, transmission season, parasite density -->
+<!-- ```{r} -->
+<!-- library(gtsummary) -->
+
+<!-- classified_inf_60_moi %>% -->
+<!--   select(ageCat, gender, mosquito_prev_2weeks_cat, pfr364Q_std_combined, symptomatic_status, moi, moi_cat, csp_reads, ama_reads) %>% -->
+<!--   tbl_summary(by = symptomatic_status, digits = all_continuous() ~ 2) %>% -->
+<!--   add_p() %>% -->
+<!--   add_overall() -->
+<!-- ``` -->
+
+<!-- **No of subsequent episodes** -->
+<!-- ```{r} -->
+<!-- classified_inf_60_moi %>% -->
+<!--   group_by(unq_memID) %>% -->
+<!--   mutate(total_episodes = n()) %>% -->
+<!--   arrange(ymd(sample_id_date)) %>% -->
+<!--   mutate(episode_no = row_number(unq_memID), subsequent_episodes = total_episodes - episode_no) %>% -->
+<!--   ungroup() %>% -->
+<!--   select(symptomatic_status, subsequent_episodes) %>% -->
+<!--   tbl_summary(by = symptomatic_status,  -->
+<!--               digits = all_continuous() ~ 2,  -->
+<!--               type = everything() ~ "continuous") %>% -->
+<!--   add_p() %>% -->
+<!--   add_overall() -->
+
+
+<!-- classified_inf_60_moi %>% -->
+<!--   group_by(unq_memID) %>% -->
+<!--   mutate(total_episodes = n()) %>% -->
+<!--   arrange(ymd(sample_id_date)) %>% -->
+<!--   mutate(episode_no = row_number(unq_memID), subsequent_episodes = total_episodes - episode_no) %>% -->
+<!--   ungroup() %>% -->
+<!--   select(symptomatic_status, subsequent_episodes) %>% -->
+<!--   tbl_summary(by = symptomatic_status) %>% -->
+<!--   add_p() #%>% -->
+<!--   #add_overall() -->
+
+<!-- ``` -->
+
+
+<!-- **subsequent infections/month** -->
+<!-- ```{r} -->
+<!-- classified_inf_60_moi %>% -->
+<!--   group_by(unq_memID) %>% -->
+<!--   mutate(total_episodes = n()) %>% -->
+<!--   arrange(ymd(sample_id_date)) %>% -->
+<!--   mutate(episode_no = row_number(unq_memID), subsequent_episodes = total_episodes - episode_no) %>% -->
+<!--   ungroup() %>% -->
+<!--   mutate(months_to_end = as.period(max(ymd(sample_id_date))-ymd(sample_id_date)) %/% months(1), subsequent_permonth =  ifelse(subsequent_episodes == 0,0, subsequent_episodes/as.numeric(months_to_end))) %>% -->
+<!--   select(symptomatic_status, subsequent_permonth) %>% -->
+<!--   tbl_summary(by = symptomatic_status) %>% -->
+<!--   add_p() %>% -->
+<!--   add_overall() -->
+
+
+
+<!-- ``` -->
+
+
+
+<!-- **MOI of subsequent infection** -->
+<!-- ```{r} -->
+<!-- classified_inf_60_moi %>% -->
+<!--   group_by(unq_memID) %>% -->
+<!--   arrange(ymd(sample_id_date)) %>% -->
+<!--   mutate(total_episodes = n(), episode_no = row_number(unq_memID), subsequent_episodes = total_episodes - episode_no) %>% -->
+<!--   mutate(moi_next = lead(moi), -->
+<!--          moi_cat_next = lead(moi_cat)) %>% -->
+<!--   ungroup() %>% -->
+<!--   select(symptomatic_status, moi_next, moi_cat_next) %>% -->
+<!--   tbl_summary(by = symptomatic_status) %>% -->
+<!--   add_p() %>% -->
+<!--   add_overall() -->
+<!-- ``` -->
+
+<!-- # Revised Table S1 -->
+<!-- ```{r} -->
+<!-- popcheck_overall_moi<-classified_infections %>% -->
+<!--   left_join(csp, by = "sample_name_dbs") %>% -->
+<!--   rename(csp_moi = haplotype_number, -->
+<!--          csp_reads = haplotype_reads, -->
+<!--          csp_haps = haplotype_list) %>% -->
+<!--   left_join(ama, by = "sample_name_dbs") %>% -->
+<!--   rename(ama_moi = haplotype_number, -->
+<!--          ama_reads = haplotype_reads, -->
+<!--          ama_haps = haplotype_list) %>% -->
+<!--   mutate(moi = pmax(csp_moi, ama_moi, na.rm = TRUE), -->
+<!--          moi_cat = ifelse(moi < 2, "1", -->
+<!--                           ifelse(moi > 1 & moi < 6, "2-5", -->
+<!--                                  ifelse(moi > 5, "> 5", NA)))) %>% -->
+<!--   filter(!is.na(moi_cat)) -->
+
+<!-- #cutoff_60 is variable before and after? greater than 60 vs less than or equal to 60 -->
+
+<!-- #time to censoring, mean, days -->
+<!-- popcheck_overall_moi %>%  -->
+<!--   group_by(cutoff_60) %>%  -->
+<!--   summarize_at(vars(Days), list(name = mean)) -->
+
+<!-- mean(popcheck_overall_moi$Days) -->
+
+<!-- t.test(popcheck_overall_moi$Days, popcheck_overall_moi$cutoff_60) -->
+
+
+<!-- #symptomatic status -->
+<!-- table(popcheck_overall_moi$symptomatic_status,useNA = "always") -->
+<!-- popcheck_overall_moi %>% -->
+<!--   group_by(symptomatic_status) %>% -->
+<!--   summarise(n=(n())) -->
+<!-- popcheck_overall_moi %>% -->
+<!--   group_by(symptomatic_status,cutoff_60) %>% -->
+<!--   summarise(n=n()) -->
+
+<!-- CrossTable(popcheck_overall_moi$symptomatic_status, popcheck_overall_moi$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS")) -->
+
+
+<!-- #Age -->
+<!-- table(popcheck_overall_moi$ageCat,useNA = "always") -->
+<!-- popcheck_overall_moi %>% -->
+<!--   group_by(ageCat) %>% -->
+<!--   summarise(n=(n())) -->
+<!-- popcheck_overall_moi %>% -->
+<!--   group_by(ageCat,cutoff_60) %>% -->
+<!--   summarise(n=n()) -->
+
+
+<!-- CrossTable(popcheck_overall_moi$ageCat, popcheck_overall_moi$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS")) -->
+
+
+<!-- #Sex -->
+<!-- table(popcheck_overall_moi$gender,useNA = "always") -->
+<!-- popcheck_overall_moi %>% -->
+<!--   group_by(gender) %>% -->
+<!--   summarise(n=(n())) -->
+<!-- popcheck_overall_moi %>% -->
+<!--   group_by(gender,cutoff_60) %>% -->
+<!--   summarise(n=n()) -->
+
+
+<!-- CrossTable(popcheck_overall_moi$gender, popcheck_overall_moi$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS")) -->
+
+<!-- #Transmission Season -->
+<!-- table(popcheck_overall_moi$mosquito_prev_2weeks_cat,useNA = "always") -->
+<!-- popcheck_overall_moi %>% -->
+<!--   group_by(mosquito_prev_2weeks_cat) %>% -->
+<!--   summarise(n=(n())) -->
+<!-- popcheck_overall_moi %>% -->
+<!--   group_by(mosquito_prev_2weeks_cat, cutoff_60) %>% -->
+<!--   summarise(n=(n())) -->
+
+
+<!-- CrossTable(popcheck_overall_moi$mosquito_prev_2weeks_cat, popcheck_overall_moi$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS")) -->
+
+
+<!-- CrossTable(popcheck_overall_moi$symptomatic_status, popcheck_overall_moi$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS")) -->
+
+<!-- CrossTable(popcheck_overall_moi$ageCat, popcheck_overall_moi$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS")) -->
+
+<!-- CrossTable(popcheck_overall_moi$gender, popcheck_overall_moi$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS")) -->
+
+<!-- CrossTable(popcheck_overall_moi$mosquito_prev_2weeks_cat, popcheck_overall_moi$cutoff_60, prop.t=FALSE, prop.chisq=FALSE, chisq = TRUE, format=c("SAS")) -->
+
+<!-- #one way to get frequencies and do tests of independence -->
+<!-- symp_table <- xtabs(~symptomatic_status+cutoff_60, data=popcheck_overall_moi) -->
+<!-- ftable(symp_table) -->
+<!-- summary(symp_table) -->
+
+<!-- ``` -->
+
+<!-- ## playing around -->
+<!-- ```{r} -->
+<!-- # symp <- classified_inf_60_moi %>% -->
+<!-- #   filter(symptomatic_status == "symptomatic infection") -->
+<!-- #  -->
+<!-- # df <- tibble() -->
+<!-- # conf <- tibble() -->
+<!-- #  -->
+<!-- # for(i in 1:1000) { -->
+<!-- #   asymp <- classified_inf_60_moi %>% -->
+<!-- #   filter(symptomatic_status == "asymptomatic infection") %>% -->
+<!-- #     slice_sample(n = 64) -->
+<!-- #    -->
+<!-- #    -->
+<!-- #   simulate <- symp %>% -->
+<!-- #     bind_rows(asymp) -->
+<!-- #    -->
+<!-- #   cox_simulate <- coxme(Surv(Days,EventCensored)~ageCat+gender+symptomatic_status+mosquito_prev_2weeks_cat+moi_cat+(1|unq_memID),data=simulate) -->
+<!-- #    -->
+<!-- #     df <- df %>% -->
+<!-- #     bind_rows(cox_simulate$coefficients) -->
+<!-- #      -->
+<!-- #     conf <- conf %>% -->
+<!-- #       bind_rows(data.frame(exp(confint(cox_simulate)))) -->
+<!-- # } -->
+<!-- #  -->
+<!-- # conf_int <- conf %>% -->
+<!-- #   rownames_to_column(var = "covariate") %>% -->
+<!-- #   rownames_to_column(var = "index") %>% -->
+<!-- #   mutate(i = ceiling(as.numeric(index)/7)) %>% -->
+<!-- #   mutate(covariate = gsub("\\....*","",covariate)) -->
+
+
+
+
+
+<!-- # df %>% -->
+<!-- #   ggplot() + -->
+<!-- #   aes(x = exp(`mosquito_prev_2weeks_cat> 50 mosquitoes`)) + -->
+<!-- #   geom_histogram() -->
+<!-- #  -->
+<!-- # df %>% -->
+<!-- #   ggplot() + -->
+<!-- #   aes(x = `ageCat5-15`) + -->
+<!-- #   geom_histogram() -->
+
+
+
+<!-- ggplot(classified_inf_60_moi) + -->
+<!--   aes(x = mosquito_prev_2weeks_cat, y = Days) + -->
+<!--   geom_boxplot() -->
+
+<!-- ggplot(classified_inf_60_moi) + -->
+<!--   aes(x = mosquito_prev_2weeks_cat, y = Days) + -->
+<!--   geom_boxplot() + -->
+<!--   facet_wrap(~EventCensored) -->
+
+<!-- classified_inf_60_moi %>% -->
+<!--   ggplot() + -->
+<!--   aes(x = sample_id_date, y = mosquito_prev_2weeks_cat) + -->
+<!--   geom_point() + -->
+<!--   theme(axis.text.x = element_text(angle = 90)) -->
+
+<!-- classified_inf_60_moi %>% -->
+<!--   ggplot() + -->
+<!--   aes(x = ymd(sample_id_date), y = Days, color = mosquito_prev_2weeks_cat) + -->
+<!--   geom_point() -->
+
+
+
+<!-- coxme(Surv(Days,EventCensored)~ageCat+gender+symptomatic_status+mosquito_prev_2weeks_cat+moi_cat+(1|unq_memID),data=classified_inf_60_moi %>% filter(ymd(sample_id_date) < ymd("2018-01-01"), Days < 200)) -->
+
+<!-- ``` -->
 
 
 rmarkdown::render("C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/mozzie_epitope_analysis/code/Overall_reinfection.Rmd", output_file=paste0('Overall_reinfection','_', Sys.Date(),'.html'),  encoding = 'UTF-8', knit_root_dir = "C:/Users/cf199/Box/O\'Meara-Taylor Postdoc/mozzie_epitope_analysis")
