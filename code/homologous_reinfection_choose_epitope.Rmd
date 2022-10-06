@@ -42,7 +42,7 @@ library(ggpubr)
 # CHOOSE EPITOPE
 Define current epitope CSP/AMA and AA positions of interest (as determined from the RF models). Need to to this before knitting!
 ```{r,echo=T}
-#CSP CD4 T-cell (Th2R)
+# #CSP CD4 T-cell (Th2R)
 # CurrentEpitopeName<-("CD4")
 # EpitopeCurrent<-c("x25","x28","x29","x31")
 # AMA <- FALSE
@@ -62,16 +62,16 @@ Define current epitope CSP/AMA and AA positions of interest (as determined from 
 # prev <- FALSE
 
 # #CSP Combined T-cell
-# CurrentEpitopeName<-("Combined")
-# EpitopeCurrent<-c("x25","x28","x29","x31","x59","x64","x66","x68")
-# AMA <- FALSE
-# prev <- TRUE
+CurrentEpitopeName<-("Combined")
+EpitopeCurrent<-c("x25","x28","x29","x31","x59","x64","x66","x68")
+AMA <- FALSE
+prev <- TRUE
 
 # #AMA
-CurrentEpitopeName<-("AMA")
-EpitopeCurrent<-c("x36","x44","x77","x90")
-AMA <- TRUE
-prev <- TRUE
+# CurrentEpitopeName<-("AMA")
+# EpitopeCurrent<-c("x36","x44","x77","x90")
+# AMA <- TRUE
+# prev <- TRUE
 
 # #AMA c1L
 # CurrentEpitopeName<-("c1L")
@@ -96,12 +96,12 @@ HumanData<-read.csv("data/original/spat21_human_final_censored_data_for_disserta
 
 season <- readRDS("data/original/spat21_mosquito_anopheles_merged_data_18JAN2019.RDS") %>%
   mutate(collection_year = year(collection_date)) %>%
-  arrange(collection_date) %>%
+  arrange(ymd(collection_date)) %>%
   group_by(collection_year, collection_week) %>%
   mutate(n_week = n()) %>%
   mutate(week_year = paste0(collection_week,"_", collection_year)) %>%
   ungroup() %>%
-  arrange(collection_date) %>%
+  arrange(ymd(collection_date)) %>%
   select(week_year, n_week) %>%
   unique() %>%
   mutate(mosquito_prev_2weeks = lag(n_week,2) + lag(n_week,1)) %>%
@@ -356,7 +356,7 @@ Time to, starting from any epitope in a sample that is not followed by a sample 
 ```{r,fig.width=2.5,fig.height=5}
 TimeToDataAdvEpitope =HumanData%>%
   mutate(symptomatic_status = ifelse(is.na(main_exposure_primary_case_def), as.character(main_outcome_primary_case_def),as.character(main_exposure_primary_case_def))) %>%
-  arrange(unq_memID, sample_id_date) %>% 
+  arrange(unq_memID, ymd(sample_id_date)) %>% 
   group_by(unq_memID) %>%
   #add columns for previous symptomatic status so that we can filter out infections within 14 days of a symptomatic infection
   mutate(Sx_prev = lag(symptomatic_status,1),
@@ -364,7 +364,7 @@ TimeToDataAdvEpitope =HumanData%>%
   #remove positive samples within 14 days of a symptomatic infection 
   filter(Sx_prev != "symptomatic infection"| is.na(Sx_prev) | days_since_prev > days(14) | pf_pcr_infection_status != "positive") %>%
   ungroup() %>%
-  arrange(unq_memID, sample_id_date) %>% 
+  arrange(unq_memID, ymd(sample_id_date)) %>% 
   group_by(unq_memID) %>%
 #Add a number to each sample
   mutate(number=1)%>%
@@ -540,6 +540,45 @@ coxplot1
 saveRDS(coxplot1, paste0("figures/robj/", CurrentEpitopeName,"_coxme_fig.RDS"))
 
 ```
+
+## Should MOI be included in the models?
+```{r}
+
+model_moicont <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + ageCat + freq+mosquito_prev_2weeks_cat+epitopecount+(1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron")
+
+model_moicont
+exp(confint(model_moicont))
+
+model_moicat <- coxme(Surv(Days,EventCensored) ~ symptomatic_bin + gender + ageCat + freq+mosquito_prev_2weeks_cat+epitopeCat+(1|unq_memID), data = TimeToDataAdvEpitope_60, ties = "efron")
+
+model_moicat
+exp(confint(model_moicat))
+
+
+extractAIC.coxme <- function(x){
+  loglik <- x$loglik + c(0, 0, x$penalty)
+  chi1 <- 2*diff(loglik[1:2]) 
+  chi2 <- 2*diff(loglik[c(1,3)])
+  c(chi1 - 2*x$df[1], chi2 - 2*x$df[2])
+}
+
+extractAIC(model) #model without moi
+extractAIC(model_moicont) #model with continuous moi
+extractAIC(model_moicat) #model with categorical moi
+
+
+#likelihood ratio tests
+
+# no moi vs continuous moi
+anova(model_moicont, model)
+
+# no moi vs categorical moi
+anova(model_moicat, model)
+
+
+```
+
+
 
 ## Comparing epitope frequncies in infections removed from the dataset and those maintained
 ```{r}
@@ -1104,15 +1143,39 @@ for_perm <- HumanData%>%
   mutate(ageCat = case_when(age_y_baseline <= 5 ~ "<5",
                               age_y_baseline >5 & age_y_baseline < 15 ~ "5-15",
                               age_y_baseline >= 15 ~ ">15"))%>%
-    mutate(ageCat=factor(ageCat,levels=c("<5","5-15",">15"))) 
+    mutate(ageCat=factor(ageCat,levels=c("<5","5-15",">15"))) %>%
+  mutate(epitopeCat = case_when(epitopecount == 1 ~"1",
+                                epitopecount >1 & epitopecount <= 5 ~ "2-5",
+                                epitopecount > 5 ~ "> 5"),
+         epitopeCat = factor(epitopeCat, levels = c("1", "2-5", "> 5")))
 
+epitope_frequencies <- for_perm %>%
+  separate_rows(AAs) %>%
+  group_by(AAs) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n/sum(n))
+
+for_perm %>%
+  ggplot() +
+  aes(x = epitopeCat) +
+  geom_bar() +
+  labs(x = "Epitope type count", y = "Number of samples") +
+  theme_bw()
+
+
+# sample_AAs <- for_perm %>%
+#   separate_rows(AAs) %>%
+#   select(sample_name_dbs, AAs)
+  
 #define function for permutation
+
 perm <- function(data = for_perm) {
+  
   perm_data <- for_perm %>%
-    group_by(is.na(AAs)) %>%
+    group_by(epitopeCat) %>%
     mutate(AAsrandom = sample(AAs)) %>%
     ungroup() %>%
-    separate_rows(AAsrandom)%>%
+    separate_rows(AAsrandom) %>%
     group_by(unq_memID, AAsrandom)%>% 
   #Uncleared haplotypes are defined as haplotypes that occur in two subsequent samples - note this where one should check if the dates are handled correctly ie. counted from end to start of each haplotype
     mutate(toNext=case_when(samplenumber==lead(samplenumber,1)-1 & symptomatic_status == "asymptomatic infection" ~ "uncleared",
@@ -1136,6 +1199,75 @@ perm <- function(data = for_perm) {
 }
 
 
+
+
+# perm <- function(data = for_perm) {
+#   
+#   AAsrandom <- split(sample(sample_AAs$AAs), sample_AAs$sample_name_dbs) %>%
+#     stack() %>%
+#     rename("sample_name_dbs" = "ind", "AAsrandom" = "values") %>%
+#     group_by(sample_name_dbs) %>%
+#     summarise(AAsrandom = str_c(AAsrandom, collapse = ","))
+#   
+#   perm_data <- for_perm %>%
+#     left_join(AAsrandom) %>%
+#     separate_rows(AAsrandom) %>%
+#     group_by(unq_memID, AAsrandom)%>% 
+#   #Uncleared haplotypes are defined as haplotypes that occur in two subsequent samples - note this where one should check if the dates are handled correctly ie. counted from end to start of each haplotype
+#     mutate(toNext=case_when(samplenumber==lead(samplenumber,1)-1 & symptomatic_status == "asymptomatic infection" ~ "uncleared",
+#                           samplenumber==lead(samplenumber,1)-1 & symptomatic_status == "symptomatic infection" ~ paste0(as.Date(lead(sample_id_date,1)) - as.Date(sample_id_date)),
+#                           samplenumber != lead(samplenumber,1)-1 ~ paste0(as.Date(lead(sample_id_date,1)) - as.Date(sample_id_date))))%>%
+#   #Remove samples without AAs and uncleared AAs
+#     ungroup()%>%
+#     filter(!is.na(AAsrandom))%>%
+#     filter(is.na(toNext)|toNext!="uncleared")%>%
+#    # filter(!toNext=="uncleared"&!toNext=="same")%>%
+#   #Add censoring criteria ie if there is no next sample, time to end of study is calculated and EventCensored=0 indicate that
+#     mutate(EventCensored = if_else(toNext!="NA","1","NA","0"))%>%
+#     mutate(Days = if_else(EventCensored=="1",paste0(toNext),paste0(as.Date("20180731","%Y%m%d") - as.Date(sample_id_date))))%>%
+#     #remove final positive samples as they are uncleared
+#     filter(samplenumber!=samplemax)%>%
+#     mutate(Days=as.numeric(Days), cutoff_60=ifelse(Days>60,1,0))%>%
+#     mutate(EventCensored=as.numeric(EventCensored))
+# 
+#   return(perm_data)
+# 
+# }
+
+
+
+
+
+
+# perm <- function(data = for_perm) {
+#   perm_data <- for_perm %>%
+#     group_by(is.na(AAs)) %>%
+#     mutate(AAsrandom = sample(AAs)) %>%
+#     ungroup() %>%
+#     separate_rows(AAsrandom)%>%
+#     group_by(unq_memID, AAsrandom)%>% 
+#   #Uncleared haplotypes are defined as haplotypes that occur in two subsequent samples - note this where one should check if the dates are handled correctly ie. counted from end to start of each haplotype
+#     mutate(toNext=case_when(samplenumber==lead(samplenumber,1)-1 & symptomatic_status == "asymptomatic infection" ~ "uncleared",
+#                           samplenumber==lead(samplenumber,1)-1 & symptomatic_status == "symptomatic infection" ~ paste0(as.Date(lead(sample_id_date,1)) - as.Date(sample_id_date)),
+#                           samplenumber != lead(samplenumber,1)-1 ~ paste0(as.Date(lead(sample_id_date,1)) - as.Date(sample_id_date))))%>%
+#   #Remove samples without AAs and uncleared AAs
+#     ungroup()%>%
+#     filter(!is.na(AAsrandom))%>%
+#     filter(is.na(toNext)|toNext!="uncleared")%>%
+#    # filter(!toNext=="uncleared"&!toNext=="same")%>%
+#   #Add censoring criteria ie if there is no next sample, time to end of study is calculated and EventCensored=0 indicate that
+#     mutate(EventCensored = if_else(toNext!="NA","1","NA","0"))%>%
+#     mutate(Days = if_else(EventCensored=="1",paste0(toNext),paste0(as.Date("20180731","%Y%m%d") - as.Date(sample_id_date))))%>%
+#     #remove final positive samples as they are uncleared
+#     filter(samplenumber!=samplemax)%>%
+#     mutate(Days=as.numeric(Days), cutoff_60=ifelse(Days>60,1,0))%>%
+#     mutate(EventCensored=as.numeric(EventCensored))
+# 
+#   return(perm_data)
+# 
+# }
+
+
 #perform permutations 1000x
 perm_data <- lapply(1:1000, function(x){
   perm(for_perm) %>%
@@ -1156,6 +1288,22 @@ perm_plot
 
 saveRDS(perm_plot, paste0("figures/robj/", CurrentEpitopeName,"_perm_data_time_dist.RDS"))
 
+```
+## How do epitope frequencies compare in permuted datasets vs actual data?
+```{r}
+perm_freqs <- perm_data %>%
+  bind_rows(.id = "perm") %>%
+  group_by(perm, AAsrandom) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  group_by(perm) %>%
+  mutate(freq = n/sum(n)*100)
+
+ggplot() +
+  geom_density(data = perm_freqs, mapping = aes(x = freq, group = perm), position = "identity", color = "lightgrey", alpha = 0.3, adjust = 1) +
+  geom_density(data = epitope_frequencies %>% mutate(freq = freq*100), mapping = aes(x = freq), position = "identity", color = "black", adjust = 1) +
+  theme_bw() +
+  theme(legend.position = "none")
 ```
 
 
