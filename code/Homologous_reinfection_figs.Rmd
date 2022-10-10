@@ -376,6 +376,66 @@ moi_sunburst_vertical <- ggarrange(sunburst_plot_vertical,
 ggsave(plot = moi_sunburst_vertical, "figures/moi_sunburst_vertical.png", height = 15, width = 10)
 
 
+
+sunburst_plot_horizontal <- ggarrange(dv10_sunburst +
+                             scale_color_manual(guide = "none", values = c("grey5", "white")) +
+                               #labs(title = "CSP DV10") +
+                             scale_alpha_manual(values = c("0" = 0, "1" = 1, "2" = 0.5), guide = "none") +
+                                          theme(plot.title = element_text(hjust = 0.5, face = "bold"), plot.margin = unit(c(0,0,0,0), "cm")),
+                             cd4_sunburst +
+                                          #labs(title = "CSP Th2R") +
+                             scale_color_manual(guide = "none", values = c("grey5", "white")) +
+                             scale_alpha_manual(values = c("0" = 0, "1" = 1, "2" = 0.5), guide = "none") +
+                                          theme(plot.title = element_text(hjust = 0.5, face = "bold"), plot.margin = unit(c(0,0,0,0), "cm")),
+            cd8_sunburst +
+                                          #labs(title = "CSP Th3R") +
+              scale_color_manual(guide = "none", values = c("grey5", "white")) +
+                             scale_alpha_manual(values = c("0" = 0, "1" = 1, "2" = 0.5), guide = "none") +
+                                          theme(plot.title = element_text(hjust = 0.5, face = "bold"), plot.margin = unit(c(0,0,0,0), "cm")),
+            c1L_sunburst +
+                                          #labs(title = "AMA-1 c1L") +
+              scale_color_manual(guide = "none", values = c("grey5", "white")) +
+                             scale_alpha_manual(values = c("0" = 0, "1" = 1, "2" = 0.5), guide = "none") +
+                                          theme(plot.title = element_text(hjust = 0.5, face = "bold"), plot.margin = unit(c(0,0,0,0), "cm")),
+            nrow = 1,
+            widths = c(1,1,1,1),
+            labels = c("CSP DV10", "CSP Th2R", "CSP Th3R", "AMA-1 c1L"),
+            hjust = -0.85,
+            vjust = 10,
+            font.label = list(size = 20))
+
+moi_plot_horizontal <- ggarrange(NULL,
+                      dv10_moi_alt +
+              labs(title = NULL)+
+                theme(plot.margin = unit(c(0,0,0,0), "cm")),
+              NULL,
+                      cd4_moi_alt +
+              labs(title = NULL)+
+                theme(plot.margin = unit(c(0,0,0,0), "cm")),
+              NULL,
+            cd8_moi_alt +
+              labs( title = NULL)+
+                theme(plot.margin = unit(c(0,0,0,0), "cm")),
+            NULL,
+            c1L_moi_alt +
+              labs( title = NULL)+
+                theme(plot.margin = unit(c(0,0,0,0), "cm")),
+            NULL,
+            nrow = 1,
+            widths = c(0.05,1,0.2,1,0.2,1,0.2,1,0.1),
+            align = "v",
+            common.legend = TRUE,
+            legend = "bottom")
+
+moi_sunburst_horizontal <- ggarrange(sunburst_plot_horizontal,
+                                     NULL,
+                          moi_plot_horizontal,
+                          nrow = 3,
+                          heights = c(6,-1.5,3),
+                          align = "v")
+
+ggsave(plot = moi_sunburst_horizontal, "figures/moi_sunburst_horizontal.png", width = 15, height = 10)
+
 ```
 
 
