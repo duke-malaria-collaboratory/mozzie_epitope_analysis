@@ -650,10 +650,12 @@ classified_inf_60_moi <- classified_infections_60 %>%
 cox_60_restrict <- coxme(Surv(Days,EventCensored)~ageCat+gender+symptomatic_status+mosquito_prev_2weeks_cat+(1|unq_memID),data=classified_inf_60_moi)
 
 cox_60_restrict
+exp(confint(cox_60_restrict))
 
 cox_60_moicont <-coxme(Surv(Days,EventCensored)~ageCat+gender+symptomatic_status+mosquito_prev_2weeks_cat+moi+(1|unq_memID),data=classified_inf_60_moi)
 
 cox_60_moicont
+exp(confint(cox_60_moicont))
 
 
 classified_inf_60_moi$moi_cat <- factor(classified_inf_60_moi$moi_cat, levels = c("1", "2-5", "> 5"))
@@ -661,6 +663,7 @@ classified_inf_60_moi$moi_cat <- factor(classified_inf_60_moi$moi_cat, levels = 
 cox_60_moicat <-coxme(Surv(Days,EventCensored)~ageCat+gender+symptomatic_status+mosquito_prev_2weeks_cat+moi_cat+(1|unq_memID),data=classified_inf_60_moi)
 
 cox_60_moicat
+exp(confint(cox_60_moicat))
 
 anova(cox_60_moicont, cox_60_restrict)
 anova(cox_60_moicat, cox_60_restrict)
